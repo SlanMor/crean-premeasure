@@ -14,6 +14,13 @@ A Microsoft MFC `CArchive` binary.
   - uint32 vertex count, then one 30-byte record per vertex: float32 x, float32 y (metres), 18 bytes of edge data, uint32 `1000`.
   - Then uint32 `1000`, a length-prefixed XML block `<roomName><name>…</name><CallidusID>…</CallidusID><TPPid/></roomName>`, then a uint16 material reference.
   - A zone object follows (`TileZone`, `OldSheetZone` or `NetZone`) with its own outline, then the calculated layout (tiles, cuts, roll cuts, cutting frames).
+- **Room block after the name** (offsets from the end of the name string; holds for 479 of 483 rooms in nine files):
+  - +0: uint16 material reference, then one byte.
+  - +3: point record (x, y, 18 bytes, uint32 1000), the label position.
+  - +41: float32 layout direction in radians (seen 3.1416 and 4.7124).
+  - +54: point record, the layout start point.
+  - +114: point record, a further reference point (meaning not confirmed).
+  - +0xee: the zone outline in 139 rooms, identical to the room outline. In the rest the zone sits elsewhere or differs from the room; the patcher refuses to move those.
 - **Edge data (18 bytes per edge, from that vertex to the next):**
   - byte 0 = 1: edge is open (no wall).
   - byte 8 = 2: another edge flag, excluded from room-level skirting; meaning not confirmed (possibly doorway).
@@ -30,6 +37,20 @@ A Microsoft MFC `CArchive` binary.
 - Each image is a 1-bit TIFF, CCITT Group 4, at 300 to 600 dpi.
 - Several sheets can sit in one floor file (Shellybanks ground and first floor have two each).
 - A float at offset 0x2c appears to relate to scale calibration (values seen: 0.9986, 1.0, 1.9975, 2.0, 4.0001); its exact meaning is not confirmed. Limerick sheet sizes differ from nominal A0 by 0.12 to 0.14%, which suggests the estimator calibrated them.
+
+## Test files sent to Crean (November 2026)
+
+Built from the Cashel "Revised measure" file with `scripts/make_callidus_test_set.py`:
+
+| File | Change | What it tells us |
+| --- | --- | --- |
+| T0-control | none | a copied file opens |
+| T1-rename | G19 renamed | text edits that change length are accepted |
+| T2-finish | G25 from FF6 to FF9 | changing the material reference is enough |
+| T3-move-all | G25, its zone and layout points moved 1 m | whether Callidus redoes the layout itself |
+| T4-move-outline | G25 outline only moved 1 m | whether the room or the zone outline drives area |
+
+Results: awaiting Crean.
 
 ## Open (needed for writing)
 
