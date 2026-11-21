@@ -1,0 +1,37 @@
+# Client data: never commit drawings, Callidus files or measures
+fixtures/
+*.est
+*.CalBack
+*.calback
+*.pdf
+*.dwg
+*.dxf
+*.xlsx
+*.xls
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
+
+# Django
+web/staticfiles/
+web/media/
+*.sqlite3
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Editors and OS
+.DS_Store
+.idea/
+.vscode/
