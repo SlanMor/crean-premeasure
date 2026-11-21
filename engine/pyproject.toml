@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "premeasure-engine"
+version = "0.1.0"
+description = "Reads finishes drawings and Callidus files; produces pre-measured Callidus files and quantities."
+requires-python = ">=3.11"
+dependencies = [
+    "shapely>=2.0",
+    "pypdfium2>=4.30",
+    "openpyxl>=3.1",
+    "pillow>=10.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+premeasure = "premeasure_engine.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
