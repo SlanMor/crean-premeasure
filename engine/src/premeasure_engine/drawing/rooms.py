@@ -230,7 +230,9 @@ def _tagged_finish(dwg: Drawing, legend: Legend, col: Colour, g) -> LegendEntry 
     return LegendEntry("floor", 0, "", f"{code} (written on the drawing, not in the legend)", col, custom_code=code)
 
 
-def find_rooms(dwg: Drawing, legend: Legend, exclude: list[tuple] | None = None) -> tuple[list[Room], dict]:
+def find_rooms(
+    dwg: Drawing, legend: Legend, exclude: list[tuple] | None = None, min_opening: float = MAX_FURNITURE_HOLE
+) -> tuple[list[Room], dict]:
     """Find finish rooms on the sheet. Returns rooms and a summary of what was set aside."""
     area = box(0, -dwg.height_m, dwg.width_m, 0)
     for x in ([legend.area] if legend.area else []) + list(exclude or []):
@@ -330,7 +332,7 @@ def find_rooms(dwg: Drawing, legend: Legend, exclude: list[tuple] | None = None)
         keep = []
         for h in r.geom.interiors:
             hp = Polygon(h)
-            if hp.area >= MAX_FURNITURE_HOLE or (hatch_union is not None and hp.intersection(hatch_union).area > 0.5 * hp.area):
+            if hp.area >= min_opening or (hatch_union is not None and hp.intersection(hatch_union).area > 0.5 * hp.area):
                 keep.append(h)
         r.geom = Polygon(r.geom.exterior, keep)
         if keep:

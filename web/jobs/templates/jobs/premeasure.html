@@ -9,10 +9,16 @@
   · {% include "jobs/_status.html" %}
 </p>
 
+{% if pm.summary and not pm.busy %}
+<form method="post" action="{% url 'reread' pm.pk %}" style="margin:-8px 0 16px">{% csrf_token %}
+  <button class="btn small secondary">Read the drawing again</button>
+  <span class="muted" style="margin-left:8px">For example after changing the measuring rules.{% if pm.summary.min_opening_m2 %} Read with openings under {{ pm.summary.min_opening_m2 }} m² measured through.{% endif %}</span>
+</form>
+{% endif %}
 {% if pm.busy %}
 <div class="card">
   <h2>{{ pm.get_status_display }}</h2>
-  <p class="muted">{% if pm.status == "reading" %}Finding rooms, finishes and skirting. This takes one to three minutes for a large drawing.{% else %}Writing the .est, its background and the review file. Under a minute.{% endif %}
+  <p class="muted">{% if pm.status == "queued" %}Waiting for the drawings ahead of it.{% elif pm.status == "reading" %}Finding rooms, finishes and skirting. This takes one to three minutes for a large drawing.{% else %}Writing the .est, its background and the review file. Under a minute.{% endif %}
   This page updates by itself, and you can leave it and come back.</p>
 </div>
 <script>
@@ -37,7 +43,7 @@
   {% if pm.written.new_products %}Added to Callidus: {{ pm.written.new_products|join:", " }}.{% endif %}
   {% if pm.written.left_out_rooms %}{{ pm.written.left_out_rooms }} areas ({{ pm.written.left_out_m2|floatformat:"2g" }} m²) have no product and are only in the review file.{% endif %}</p>
   <p><a class="btn" href="{% url 'download' pm.pk %}">Download Callidus files (.zip)</a></p>
-  <p class="muted">Unzip to a local folder (not the Z: drive) before opening in Callidus. Rooms named "CHECK - " need a look; the reasons are in the review file. Change a product below and write again at any time.</p>
+  <p class="muted">The zip holds the Callidus job, its background, a review file and a quantities file with wastage. Unzip to a local folder (not the Z: drive) before opening in Callidus. Rooms named "CHECK - " need a look; the reasons are in the review file. Change a product below and write again at any time.</p>
 </div>
 {% endif %}
 
@@ -63,14 +69,14 @@
 
 <div class="card">
   <h2>Products</h2>
-  <p class="muted">Each finish on the drawing's legend, with what was found, and its product from the <a href="{% url 'setup' project.pk %}">project setup</a> (matched by finish code). Finishes with no product are left out of Callidus and stay in the review file.</p>
+  <p class="muted">Each finish on the drawing's legend, with what was found, and its product from the <a href="{% url 'setup' project.pk %}">project's products</a> (matched by finish code). You can change one here for this drawing only. Finishes with no product are left out of Callidus and stay in the review file.</p>
   {% if missing %}
   <div class="note">
-    {% if not n_setup %}No products are set up for this project yet.{% else %}{{ missing|length }} finish{{ missing|length|pluralize:"es" }} on this drawing {{ missing|length|pluralize:"is,are" }} not in the project setup: {% for f in missing %}{{ f.code }}{% if not forloop.last %}, {% endif %}{% endfor %}.{% endif %}
-    Add {% if n_setup %}them{% else %}this drawing's finishes{% endif %} to the setup, then check the product names.
+    {{ missing|length }} finish code{{ missing|length|pluralize }} on this drawing {{ missing|length|pluralize:"is,are" }} not in the project's products yet: {% for f in missing %}{{ f.code }}{% if not forloop.last %}, {% endif %}{% endfor %}.
+    Add them, then choose a product for each.
     <form method="post" action="{% url 'fill_setup' project.pk pm.pk %}" style="margin-top:10px">{% csrf_token %}
       <input type="hidden" name="next" value="{% url 'premeasure' pm.pk %}">
-      <button class="btn">Add to project setup</button>
+      <button class="btn">Add them to the project's products</button>
     </form>
   </div>
   {% endif %}
@@ -84,10 +90,11 @@
       <td><b>{{ f.code }}</b>{% if not f.in_legend %}<br><span class="pill warn">not in legend</span>{% endif %}</td>
       <td class="reasons">{{ f.description|truncatechars:140 }}</td>
       <td class="num">{% if f.kind == "floor" %}{{ f.amount|floatformat:"2g" }} m²<br><span class="muted">{{ f.rooms }} area{{ f.rooms|pluralize }}</span>{% else %}{{ f.amount|floatformat:"2g" }} m{% endif %}</td>
-      <td>{{ field }}{% if f.code not in in_setup and f.suggestion and field.value %}<div class="help">Suggested: matched on {{ f.why }}</div>{% endif %}</td>
+      <td>{{ field }}</td>
     </tr>
     {% endfor %}
   </table>
+  {% if unmapped %}<p class="note" style="margin-top:16px">Found on this drawing with no product: {% for f in unmapped %}{{ f.code }}{% if not forloop.last %}, {% endif %}{% endfor %}. These are left out of Callidus unless you choose a product.</p>{% endif %}
   <p style="margin-top:16px"><button class="btn">{% if pm.status == "done" %}Write again with these products{% else %}Write Callidus files{% endif %}</button></p>
   </form>
 </div>

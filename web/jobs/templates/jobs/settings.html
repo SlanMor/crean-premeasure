@@ -1,0 +1,21 @@
+{% extends "jobs/base.html" %}
+{% block title %}Settings · Crean pre-measure{% endblock %}
+{% block content %}
+<h1>Settings</h1>
+<p class="sub">Set once for the whole company.</p>
+<div class="steps">
+  <div class="card"><h2>Callidus template</h2>
+    <p class="muted">The Callidus job new files are built on, and its background.</p>
+    <p>{% if template and template.est %}<span class="pill ok">Set up</span>{% elif template %}<span class="pill warn">Needs its .est</span>{% else %}<span class="pill bad">Not set up</span>{% endif %}</p>
+    <a class="btn secondary" href="{% url 'settings_template' %}">Open</a></div>
+  <div class="card"><h2>Measuring rules</h2>
+    <p class="muted">How Crean measures: room edges, doorways, stairs, wastage.</p>
+    <a class="btn secondary" href="{% url 'settings_rules' %}">Open</a></div>
+  <div class="card"><h2>Products</h2>
+    <p class="muted">{{ n_products }} product{{ n_products|pluralize }} in the list.</p>
+    <a class="btn secondary" href="{% url 'products' %}">Open</a></div>
+  <div class="card"><h2>Users</h2>
+    <p class="muted">{{ n_users }} active user{{ n_users|pluralize }}.</p>
+    <a class="btn secondary" href="{% url 'settings_users' %}">Open</a></div>
+</div>
+{% endblock %}

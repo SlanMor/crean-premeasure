@@ -6,32 +6,31 @@
 <p class="sub">{% if project.client %}{{ project.client }}{% endif %}{% if project.main_contractor %} · {{ project.main_contractor }}{% endif %}{% if project.site %} · {{ project.site }}{% endif %}</p>
 
 <div class="card">
-  <h2>1. Project setup</h2>
-  {% if products %}
-  <p>{{ products|length }} product{{ products|length|pluralize }} set up for this tender. <a href="{% url 'setup' project.pk %}">Change them</a></p>
-  <table>
-    <tr><th></th><th>Finish code</th><th>Product</th></tr>
-    {% for p in products %}<tr><td>{% if p.fill %}<span class="swatch" style="background:{{ p.fill }}"></span>{% endif %}</td><td>{{ p.finish_code|default:"-" }}</td><td>{{ p.name }}</td></tr>{% endfor %}
-  </table>
-  {% else %}
-  <p>Set up the products this tender uses. You can type them in, fill them from a drawing's legend, or import them from a Callidus job.</p>
-  <p><a class="btn" href="{% url 'setup' project.pk %}">Set up products</a></p>
-  {% endif %}
+  <div class="steps">
+    <div class="step"><b>1. Products</b>
+      {% if rows %}{{ n_chosen }} of {{ rows|length }} finish code{{ rows|length|pluralize }} have a product.{% else %}Not set up yet.{% endif %}
+      <div style="margin-top:8px"><a class="btn small {% if rows %}secondary{% endif %}" href="{% url 'setup' project.pk %}">{% if rows %}Change{% else %}Set up products{% endif %}</a></div></div>
+    <div class="step"><b>2. Measuring rules</b>
+      {% if own_rules %}Rules set for this project.{% else %}Following the company rules.{% endif %}
+      <div style="margin-top:8px"><a class="btn small secondary" href="{% url 'project_rules' project.pk %}">{% if own_rules %}Change{% else %}Set for this project{% endif %}</a></div></div>
+    <div class="step"><b>3. Drawings</b>
+      {{ premeasures|length }} drawing{{ premeasures|length|pluralize }}. Add them below, one or many at a time.</div>
+  </div>
 </div>
 
 <div class="card">
-  <h2>2. Add a finishes drawing</h2>
-  {% if not job %}<p class="note">There is no Callidus job to build on yet. Ask the administrator to add the house Callidus template.</p>{% endif %}
+  <h2>Add finishes drawings</h2>
+  {% if not job %}<p class="note">There is no Callidus job to build on yet. {% if user.is_staff %}Add it in <a href="{% url 'settings_template' %}">Settings, Callidus template</a>.{% else %}Ask the administrator to add the house Callidus template.{% endif %}</p>{% endif %}
   <form method="post" action="{% url 'new_premeasure' project.pk %}" enctype="multipart/form-data">{% csrf_token %}
-    <div class="grid">
-      {% with field=form.drawing %}{% include "jobs/_field.html" %}{% endwith %}
-      {% with field=form.page %}{% include "jobs/_field.html" %}{% endwith %}
+    {% with field=form.drawings %}{% include "jobs/_field.html" %}{% endwith %}
+    <div class="form-grid">
       {% with field=form.level %}{% include "jobs/_field.html" %}{% endwith %}
       {% with field=form.revision %}{% include "jobs/_field.html" %}{% endwith %}
     </div>
-    {% with field=form.title %}{% include "jobs/_field.html" %}{% endwith %}
-    <button class="btn">Read the drawing</button>
-    <span class="muted" style="margin-left:10px">Takes one to three minutes. You can leave the page.</span>
+    {% with field=form.auto_write %}{% include "jobs/_field.html" %}{% endwith %}
+    {% with field=form.notify %}{% include "jobs/_field.html" %}{% endwith %}
+    <button class="btn">Read the drawings</button>
+    <span class="muted" style="margin-left:10px">One to three minutes per drawing. You can close the page; they carry on.</span>
   </form>
 </div>
 
@@ -42,7 +41,7 @@
     <tr><th>Name</th><th>Level</th><th>Drawing</th><th>Status</th><th>Added</th></tr>
     {% for pm in premeasures %}
     <tr><td><a href="{% url 'premeasure' pm.pk %}">{{ pm.title }}</a></td><td>{{ pm.level }}</td>
-        <td class="muted">{{ pm.drawing.drawing_number }}{% if pm.drawing.revision %} rev {{ pm.drawing.revision }}{% endif %}</td>
+        <td class="muted">{{ pm.drawing.drawing_number }}{% if pm.page > 1 %} p{{ pm.page }}{% endif %}{% if pm.drawing.revision %} rev {{ pm.drawing.revision }}{% endif %}</td>
         <td>{% include "jobs/_status.html" %}</td><td class="muted">{{ pm.created_at|date:"j M Y H:i" }}</td></tr>
     {% endfor %}
   </table>

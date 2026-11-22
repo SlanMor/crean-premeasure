@@ -72,3 +72,29 @@ def test_refuses_a_product_not_in_the_starter_file(cashel, tmp_path):
     a, est, cb = cashel
     with pytest.raises(ValueError, match="not in the starter file"):
         write_outputs(a, est, cb, {"FF13": "Made-up product"}, {}, tmp_path, "x")
+
+
+def test_quantities_file_applies_wastage(cashel, tmp_path):
+    from premeasure_engine.premeasure import write_outputs
+
+    a, est, cb = cashel
+    neptune = "FF8 - Forbo Concrete Neptune 3756"
+    out = write_outputs(a, est, cb, {"FF13": neptune}, {}, tmp_path, "q", wastage={neptune: 10})
+    (row,) = list(csv.DictReader(out.quantities.open(encoding="utf-8-sig")))
+    assert row["Product"] == neptune and row["Unit"] == "m2"
+    assert float(row["Net quantity"]) == pytest.approx(120.14, abs=0.5)
+    assert float(row["Quantity with wastage"]) == pytest.approx(float(row["Net quantity"]) * 1.1, abs=0.01)
+
+
+def test_plan_pages_skips_pages_that_are_not_plans(tmp_path):
+    if not ROOT:
+        pytest.skip("PREMEASURE_FIXTURES not set")
+    import pypdfium2 as pdfium
+
+    from premeasure_engine.premeasure import plan_pages
+
+    doc = pdfium.PdfDocument.new()
+    doc.new_page(595, 842)
+    doc.import_pages(pdfium.PdfDocument(str(Path(ROOT) / "cashel" / "finishes-P2.pdf")))
+    doc.save(tmp_path / "two.pdf")
+    assert plan_pages(tmp_path / "two.pdf") == [1]

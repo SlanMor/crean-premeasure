@@ -1,0 +1,38 @@
+{% extends "jobs/base.html" %}
+{% block title %}Measuring rules · Crean pre-measure{% endblock %}
+{% block content %}
+{% if company %}<p class="muted"><a href="{% url 'settings' %}">Settings</a></p><h1>Company measuring rules</h1>
+<p class="sub">How Crean measures. Every project follows these unless it has its own.</p>
+{% else %}<p class="muted"><a href="{% url 'project' project.pk %}">{{ project.code }} {{ project.name }}</a></p><h1>Measuring rules for this project</h1>
+<p class="sub">{% if own %}This project has its own rules.{% else %}Starting from the company rules. Saving makes them this project's own.{% endif %}</p>{% endif %}
+<p class="note">Rules marked <span class="pill ok">used now</span> already change what the software produces. The others are recorded and will be applied as they are built. After changing rules, read a drawing again to apply them.</p>
+<form method="post">{% csrf_token %}
+<div class="card">
+  <h2>Where floors start and stop</h2>
+  <div class="form-grid">
+  {% for field in form %}{% if field.name in "room_edge glazing skirting_on_glazing doorways threshold_strips min_opening_m2 furniture" %}
+    <div>{% include "jobs/_field.html" %}{% if field.name in applied %}<span class="pill ok">used now</span>{% endif %}</div>
+  {% endif %}{% endfor %}
+  </div>
+</div>
+<div class="card">
+  <h2>Stairs, rooms and drawings</h2>
+  <div class="form-grid">
+  {% for field in form %}{% if field.name in "stairs nosings_separate room_splits coving_notes lift_floors two_sheets" %}
+    <div>{% include "jobs/_field.html" %}{% if field.name in applied %}<span class="pill ok">used now</span>{% endif %}</div>
+  {% endif %}{% endfor %}
+  </div>
+</div>
+<div class="card">
+  <h2>Wastage by type</h2>
+  <p class="muted">The allowance on top of the Callidus layout, used in the quantities file when a product has no wastage of its own.</p>
+  <div class="form-grid">
+  {% for field in form %}{% if field.name|slice:":8" == "wastage_" %}{% include "jobs/_field.html" %}{% endif %}{% endfor %}
+  </div>
+</div>
+<button class="btn">Save rules</button>
+</form>
+{% if not company and own %}
+<form method="post" style="margin-top:12px">{% csrf_token %}<input type="hidden" name="action" value="use_company"><button class="btn secondary">Go back to the company rules</button></form>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,16 @@
+{% extends "jobs/base.html" %}
+{% block content %}
+<p class="muted"><a href="{% url 'settings_users' %}">Users</a></p>
+<h1>{{ account.get_full_name|default:account.username }}</h1>
+<div class="card">
+  <form method="post">{% csrf_token %}
+    {% if form.non_field_errors %}<div class="msg error">{{ form.non_field_errors|join:" " }}</div>{% endif %}
+    <div class="form-grid">
+      {% for field in form %}{% if field.name != "is_staff" and field.name != "is_active" %}{% include "jobs/_field.html" %}{% endif %}{% endfor %}
+    </div>
+    {% with field=form.is_staff %}{% include "jobs/_field.html" %}{% endwith %}
+    {% with field=form.is_active %}{% include "jobs/_field.html" %}{% endwith %}
+    <button class="btn">Save</button>
+  </form>
+</div>
+{% endblock %}

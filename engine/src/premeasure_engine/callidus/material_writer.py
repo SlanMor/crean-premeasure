@@ -177,6 +177,7 @@ class ExistingProduct:
     name: str
     kind: str  # sheet, tile, edge (skirting, matwell frames, NONE), or the class name if unknown
     copyable: bool  # can be used as the settings for a new product
+    colour: tuple[int, int, int] | None = None  # display colour in Callidus, where we can read it
 
 
 def existing_products(path: str | Path) -> list[ExistingProduct]:
@@ -201,5 +202,10 @@ def existing_products(path: str | Path) -> list[ExistingProduct]:
             tag = struct.unpack_from("<H", data, c.end - PRODUCT_TAIL - 2)[0]
             cls = classes.get(tag & 0x7FFF, "unknown") if tag & 0x8000 else "unknown"
         kind = KINDS.get(cls, cls)
-        out.append(ExistingProduct(c.name, kind, _plain(data, c) and kind in ("sheet", "edge") and c.name != "NONE"))
+        plain = _plain(data, c)
+        colour = None
+        if plain:
+            at = c.end - PRODUCT_TAIL - 2 - SETTINGS + COLOUR_AT
+            colour = tuple(data[at : at + 3])
+        out.append(ExistingProduct(c.name, kind, plain and kind in ("sheet", "edge") and c.name != "NONE", colour))
     return out
