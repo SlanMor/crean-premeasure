@@ -164,7 +164,13 @@ class _Hatch:
 
 
 def _is_strip(g) -> bool:
-    return g.area > 0 and g.buffer(-STRIP_TEST).area < 0.3 * g.area
+    if g.area <= 0:
+        return False
+    # Eroding by d removes at most perimeter x d, so a shape that keeps 30%
+    # whatever happens needs no buffer (the buffer is slow on big shapes).
+    if g.length * STRIP_TEST <= 0.7 * g.area:
+        return False
+    return g.buffer(-STRIP_TEST).area < 0.3 * g.area
 
 
 def _classify_colour(col: Colour, g, legend: Legend, hatch: _Hatch) -> tuple[LegendEntry | None, str]:
@@ -244,11 +250,7 @@ def find_rooms(dwg: Drawing, legend: Legend, exclude: list[tuple] | None = None)
             continue
         finishes[col] = _classify_colour(col, g, legend, hatch)
 
-    # 2. building outline and hatch-only floor
-    every = unary_union(list(vis.values()))
-    sealed = every.buffer(SEAL, join_style=2).buffer(-SEAL, join_style=2)
-    outline = unary_union([Polygon(p.exterior) for p in _parts(sealed) if p.area > 50])
-    empty = outline.difference(every)
+    # 2. hatch-only floor, inside the building outline
     hatch_rooms: list[Room] = []
     # Black hatch is not used: black is also walls, doors, stairs and text,
     # so finishes drawn only in black (matting on Cashel) are left to be drawn
@@ -259,6 +261,14 @@ def find_rooms(dwg: Drawing, legend: Legend, exclude: list[tuple] | None = None)
     report["manual_finishes"] = [
         e.code for e in legend.floors() if e.fill is None and (not e.hatch or e.hatch[0] == BLACK)
     ]
+    empty = None
+    if hatch_only:
+        every = unary_union(list(vis.values()))
+        # the outline only needs to be rough: simplify before the slow 1 m buffers
+        rough = every.simplify(0.05, preserve_topology=False).buffer(0)
+        sealed = rough.buffer(SEAL, join_style=2).buffer(-SEAL, join_style=2)
+        outline = unary_union([Polygon(p.exterior) for p in _parts(sealed) if p.area > 50])
+        empty = outline.difference(every)
     for p in _parts(empty):
         if p.area < 0.5:
             continue
@@ -323,9 +333,14 @@ def find_rooms(dwg: Drawing, legend: Legend, exclude: list[tuple] | None = None)
             if hp.area >= MAX_FURNITURE_HOLE or (hatch_union is not None and hp.intersection(hatch_union).area > 0.5 * hp.area):
                 keep.append(h)
         r.geom = Polygon(r.geom.exterior, keep)
-        unexplained = [h for h in keep if hatch_union is None or Polygon(h).intersection(hatch_union).area < 0.5 * Polygon(h).area]
-        if unexplained:
-            r.flag(f"{len(unexplained)} opening(s) inside the room left out of its area")
+        if keep:
+            # Callidus rooms are written as outlines only for now, so the file
+            # would count the opening (or the carpet room inside it) twice.
+            cut = sum(Polygon(h).area for h in keep)
+            r.flag(
+                f"{len(keep)} opening(s) or other finish inside the room ({cut:.2f} m2): the area here leaves "
+                "them out, but the Callidus room is the outer outline, so cut them out in Callidus"
+            )
 
     # 6. skirting along each edge
     _skirting(rooms, vis, legend, report)

@@ -1,0 +1,110 @@
+{% extends "jobs/base.html" %}
+{% block title %}{{ pm.title }} · Crean pre-measure{% endblock %}
+{% block content %}
+<p class="muted"><a href="{% url 'project' project.pk %}">{{ project.code }} {{ project.name }}</a></p>
+<h1>{{ pm.title }}</h1>
+<p class="sub">
+  <a href="{% url 'drawing' pm.pk %}" target="_blank">{{ pm.drawing.filename }}</a>, page {{ pm.page }}
+  {% if pm.summary %} · scale 1:{{ pm.summary.scale|floatformat:"0" }}{% endif %}
+  · products from {{ pm.starter.filename }} · {% include "jobs/_status.html" %}
+</p>
+
+{% if pm.busy %}
+<div class="card">
+  <h2>{{ pm.get_status_display }}</h2>
+  <p class="muted">{% if pm.status == "reading" %}Finding rooms, finishes and skirting. This takes one to three minutes for a large drawing.{% else %}Writing the .est, its background and the review file. Under a minute.{% endif %}
+  This page updates by itself, and you can leave it and come back.</p>
+</div>
+<script>
+  setInterval(function () {
+    fetch("{% url 'status' pm.pk %}").then(r => r.json()).then(d => { if (!d.busy) location.reload(); });
+  }, 4000);
+</script>
+{% elif pm.status == "failed" %}
+<div class="card">
+  <h2>Something went wrong</h2>
+  <p>{% if pm.summary %}The Callidus files could not be written.{% else %}The drawing could not be read.{% endif %} The detail below is for whoever supports the platform.</p>
+  <pre style="white-space:pre-wrap" class="muted">{{ pm.error }}</pre>
+  <form method="post" action="{% url 'retry' pm.pk %}">{% csrf_token %}<button class="btn">Try again</button></form>
+</div>
+{% endif %}
+
+{% if form %}
+{% if pm.status == "done" %}
+<div class="card">
+  <h2>Callidus files ready</h2>
+  <p>{{ pm.written.rooms }} rooms, {{ pm.written.area_m2|floatformat:"2g" }} m², written with the products below.
+  {% if pm.written.left_out_rooms %}{{ pm.written.left_out_rooms }} areas ({{ pm.written.left_out_m2|floatformat:"2g" }} m²) have no product and are only in the review file.{% endif %}</p>
+  <p><a class="btn" href="{% url 'download' pm.pk %}">Download Callidus files (.zip)</a></p>
+  <p class="muted">Unzip to a local folder (not the Z: drive) before opening in Callidus. Rooms named "CHECK - " need a look; the reasons are in the review file. Change a product below and write again at any time.</p>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="grid">
+    <div class="stat"><b>{{ n_rooms }}</b><span>areas found</span></div>
+    <div class="stat"><b>{{ area|floatformat:"2g" }} m²</b><span>floor found on the drawing</span></div>
+    <div class="stat"><b>{{ n_written }}</b><span>areas with a product ({{ area_written|floatformat:"2g" }} m²)</span></div>
+    <div class="stat"><b>{{ n_review }}</b><span>areas to check</span></div>
+  </div>
+  {% if pm.summary.manual_finishes %}
+  <p class="note" style="margin:16px 0 0">Measure by hand: {{ pm.summary.manual_finishes|join:", " }}. These are drawn in black linework only (often matwells), which the software cannot yet tell apart from walls and doors.</p>
+  {% endif %}
+</div>
+
+<div class="card preview">
+  <h2>Drawing</h2>
+  <p class="key"><span><span class="swatch" style="background:#16a050"></span> found, product chosen</span>
+    <span><span class="swatch" style="background:#e68c00"></span> found, needs a check</span>
+    <span><span class="swatch" style="background:#888"></span> found, no product</span></p>
+  {% if pm.preview %}<a href="{% url 'preview' pm.pk %}" target="_blank"><img src="{% url 'preview' pm.pk %}?v={{ pm.updated_at|date:'U' }}" alt="Rooms found on the drawing"></a>{% endif %}
+</div>
+
+<div class="card">
+  <h2>Products</h2>
+  <p class="muted">Each finish on the drawing's legend, with what was found. Choose the Callidus product for each one you are pricing. Finishes left out are not drawn in Callidus; they stay in the review file. Suggestions come from product codes and colour names, and are only offered when they are a close match.</p>
+  <form method="post" action="{% url 'write' pm.pk %}">{% csrf_token %}
+  <table>
+    <tr><th></th><th>Finish</th><th>On the drawing</th><th class="num">Found</th><th style="width:38%">Callidus product</th></tr>
+    {% for f, field in form.rows %}
+    {% ifchanged f.kind %}{% if f.kind == "skirting" %}<tr><th colspan="5" style="padding-top:18px">Skirting on room edges</th></tr>{% endif %}{% endifchanged %}
+    <tr>
+      <td>{% if f.fill %}<span class="swatch" style="background:rgb({{ f.fill.0 }},{{ f.fill.1 }},{{ f.fill.2 }})"></span>{% endif %}</td>
+      <td><b>{{ f.code }}</b>{% if not f.in_legend %}<br><span class="pill warn">not in legend</span>{% endif %}</td>
+      <td class="reasons">{{ f.description|truncatechars:140 }}</td>
+      <td class="num">{% if f.kind == "floor" %}{{ f.amount|floatformat:"2g" }} m²<br><span class="muted">{{ f.rooms }} area{{ f.rooms|pluralize }}</span>{% else %}{{ f.amount|floatformat:"2g" }} m{% endif %}</td>
+      <td>{{ field }}{% if f.suggestion %}<div class="help">Suggested: matched on {{ f.why }}</div>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p style="margin-top:16px"><button class="btn">{% if pm.status == "done" %}Write again with these products{% else %}Write Callidus files{% endif %}</button></p>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Areas found</h2>
+  <table>
+    <tr><th>Room</th><th>Finish</th><th class="num">Area m²</th><th>Skirting</th><th>Status</th></tr>
+    {% for r in rooms %}
+    <tr class="{% if not r.written %}row-off{% endif %}">
+      <td>{{ r.label|default:"(no room tag)" }}</td>
+      <td>{{ r.finish|default:"-" }}{% if r.product %}<div class="reasons">{{ r.product|truncatechars:60 }}</div>{% endif %}</td>
+      <td class="num">{{ r.area_m2|floatformat:"2g" }}</td>
+      <td class="reasons">{{ r.skirting }}</td>
+      <td>{% if not r.written %}<span class="pill off">No product</span>{% elif r.status == "Verified" %}<span class="pill ok">Verified</span>{% else %}<span class="pill warn">Check</span>{% endif %}
+        {% if r.reasons %}<div class="reasons">{{ r.reasons|join:"; " }}</div>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+
+{% if pm.summary.unknown_fills %}
+<div class="card">
+  <details><summary><b>Colours on the plan that are not in the legend</b> <span class="muted">({{ pm.summary.unknown_fills|length }}, not measured)</span></summary>
+  <p class="muted">Usually walls, furniture, stairs or other trades. If one of these is a floor finish, the legend on the drawing is missing it.</p>
+  <table>{% for u in pm.summary.unknown_fills %}<tr><td><span class="swatch" style="background:rgb({{ u.colour.0 }},{{ u.colour.1 }},{{ u.colour.2 }})"></span></td><td>RGB {{ u.colour.0 }}, {{ u.colour.1 }}, {{ u.colour.2 }}</td><td class="num">{{ u.area_m2|floatformat:"2g" }} m²</td></tr>{% endfor %}</table>
+  </details>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

@@ -1,0 +1,1 @@
+{% if pm.status == "done" %}<span class="pill ok">{{ pm.get_status_display }}</span>{% elif pm.status == "review" %}<span class="pill warn">{{ pm.get_status_display }}</span>{% elif pm.status == "failed" %}<span class="pill bad">{{ pm.get_status_display }}</span>{% else %}<span class="pill off">{{ pm.get_status_display }}</span>{% endif %}

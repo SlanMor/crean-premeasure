@@ -102,3 +102,15 @@ def test_whole_job_structure_and_totals(cashel, tmp_path):
         if k != "FF8":
             assert v == before[k], k
     assert round(after["FF8"] - before["FF8"], 3) == before["NONE"]
+
+
+def test_long_room_name_reads_back(cashel, tmp_path):
+    # names of 255 bytes and over take MFC's 0xFF + WORD length form
+    from dataclasses import replace
+
+    rooms = _rooms(cashel)[:3]
+    rooms[1] = replace(rooms[1], name="L00-SUP-019 / " * 20 + "Store")
+    out = tmp_path / "long.est"
+    out.write_bytes(build_job(load_template(cashel), rooms))
+    names = [r.name for r in read_est(out).rooms]
+    assert names[1] == rooms[1].name and len(names) == 3

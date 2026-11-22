@@ -1,0 +1,11 @@
+{% extends "jobs/base.html" %}
+{% block content %}
+<p class="muted"><a href="{% url 'project' project.pk %}">{{ project.code }} {{ project.name }}</a></p>
+<h1>Add a finishes drawing</h1>
+<div class="card">
+  <form method="post" enctype="multipart/form-data">{% csrf_token %}
+    {% for field in form %}{% include "jobs/_field.html" %}{% endfor %}
+    <button class="btn">Read the drawing</button>
+  </form>
+</div>
+{% endblock %}
