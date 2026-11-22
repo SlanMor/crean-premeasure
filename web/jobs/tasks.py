@@ -47,7 +47,8 @@ from pathlib import Path  # noqa: E402
 
 from django.core.files import File  # noqa: E402
 
-from .models import BackgroundTemplate, Premeasure, Product  # noqa: E402
+from .models import BackgroundTemplate, Premeasure  # noqa: E402
+from .setup import BaseJob, base_job, default_mapping, new_products_for  # noqa: E402
 
 
 def safe_name(text: str) -> str:
@@ -62,6 +63,10 @@ def _fail(pm: Premeasure, exc: Exception) -> None:
     pm.save(update_fields=["status", "error", "updated_at"])
 
 
+def _setup_names(pm: Premeasure) -> list[str]:
+    return [p.name for p in pm.project.products.all()]
+
+
 def _analysis(pm: Premeasure):
     from premeasure_engine.premeasure import analyse
 
@@ -71,58 +76,67 @@ def _analysis(pm: Premeasure):
                 return pickle.load(f)  # written by our own worker, never uploaded
         except Exception:
             pass  # stale after an engine update: read the drawing again
-    return analyse(pm.drawing.file.path, pm.starter.file.path, page=pm.page - 1)
+    return analyse(pm.drawing.file.path, _setup_names(pm), page=pm.page - 1)
 
 
-def _default_products(pm: Premeasure, summary: dict) -> tuple[dict, dict]:
-    """Products saved for this project first, then confident suggestions."""
-    saved = {p.finish_code: p.callidus_material for p in pm.project.products.all()}
-    materials = set(summary["materials"])
-    floors, skirtings = {}, {}
-    for f in summary["finishes"]:
-        target = floors if f["kind"] == "floor" else skirtings
-        if saved.get(f["code"]) in materials:
-            target[f["code"]] = saved[f["code"]]
-        elif saved.get(f["code"]) == "":
-            continue  # left out on an earlier drawing of this project
-        elif f["kind"] == "floor" and f["suggestion"]:
-            target[f["code"]] = f["suggestion"]
-    return floors, skirtings
+def _save_file(pm: Premeasure, field: str, path: Path) -> None:
+    old = getattr(pm, field)
+    if old:
+        old.delete(save=False)
+    with path.open("rb") as f:
+        getattr(pm, field).save(f"{pm.pk}-{path.name}", File(f), save=False)
 
 
 def analyse_premeasure(pk: int) -> None:
-    from premeasure_engine.premeasure import render_preview, summary
+    from premeasure_engine.premeasure import analyse, render_preview, summary
 
     pm = Premeasure.objects.select_related("drawing", "starter", "project").get(pk=pk)
     pm.status, pm.error = Premeasure.Status.READING, ""
     pm.save(update_fields=["status", "error", "updated_at"])
     try:
-        from premeasure_engine.premeasure import analyse
-
-        a = analyse(pm.drawing.file.path, pm.starter.file.path, page=pm.page - 1)
+        a = analyse(pm.drawing.file.path, _setup_names(pm), page=pm.page - 1)
         pm.summary = summary(a)
-        pm.finish_products, pm.skirting_products = _default_products(pm, pm.summary)
+        pm.finish_products, pm.skirting_products = default_mapping(pm.project, pm.summary)
         with tempfile.TemporaryDirectory() as tmp:
             work = Path(tmp) / "analysis.pickle"
             work.write_bytes(pickle.dumps(a))
             png = render_preview(a, Path(tmp) / "preview.png", highlight=set(pm.finish_products))
-            for field, path in (("analysis_file", work), ("preview", png)):
-                old = getattr(pm, field)
-                if old:
-                    old.delete(save=False)
-                with path.open("rb") as f:
-                    getattr(pm, field).save(f"{pm.pk}-{path.name}", File(f), save=False)
+            _save_file(pm, "analysis_file", work)
+            _save_file(pm, "preview", png)
+        pm.summary["preview_for"] = sorted(pm.finish_products)
         pm.status = Premeasure.Status.REVIEW
         pm.save()
     except Exception as exc:
         _fail(pm, exc)
 
 
+def refresh_preview(pm: Premeasure, codes: set[str]) -> None:
+    """Redraw the preview when the finishes with a product have changed (for example after setup)."""
+    from premeasure_engine.premeasure import render_preview
+
+    if not pm.summary or sorted(codes) == pm.summary.get("preview_for"):
+        return
+    a = _analysis(pm)
+    with tempfile.TemporaryDirectory() as tmp:
+        _save_file(pm, "preview", render_preview(a, Path(tmp) / "preview.png", highlight=codes))
+    pm.summary["preview_for"] = sorted(codes)
+    pm.save(update_fields=["preview", "summary", "updated_at"])
+
+
+def _job(pm: Premeasure) -> BaseJob:
+    if pm.starter:
+        return BaseJob(Path(pm.starter.file.path), pm.starter)
+    job = base_job(pm.project)
+    if job is None:
+        raise ValueError("No Callidus job to build on. Ask the administrator to add the house Callidus template.")
+    return job
+
+
 def background_template(pm: Premeasure) -> Path:
-    """The starter's own .CalBack if it has one sheet, else the house template."""
+    """The project job's own .CalBack if it has one sheet, else the house template's."""
     from premeasure_engine.premeasure import calback_sheets
 
-    own = pm.starter.background
+    own = pm.starter.background if pm.starter else None
     for candidate in ([own.file.path] if own else []) + [t.file.path for t in BackgroundTemplate.objects.all()]:
         try:
             if calback_sheets(candidate) == 1:
@@ -130,8 +144,8 @@ def background_template(pm: Premeasure) -> Path:
         except Exception:
             continue
     raise ValueError(
-        "No one-sheet Callidus background to use as a template. Ask the administrator to add one "
-        "under Background templates (any Crean .CalBack with one sheet)."
+        "No one-sheet Callidus background to use as a template. Ask the administrator to add the "
+        "house Callidus template (any Crean .CalBack with one sheet)."
     )
 
 
@@ -140,49 +154,35 @@ def write_premeasure(pk: int) -> None:
 
     pm = Premeasure.objects.select_related("drawing", "starter", "project").get(pk=pk)
     try:
+        job = _job(pm)
+        new, problems = new_products_for(
+            pm.project, list(pm.finish_products.values()) + list(pm.skirting_products.values()), job
+        )
+        if problems:
+            raise ValueError("; ".join(problems))
         a = _analysis(pm)
         template = background_template(pm)
         name = safe_name(pm.title)
         with tempfile.TemporaryDirectory() as tmp:
-            out = write_outputs(a, pm.starter.file.path, template, pm.finish_products,
-                                pm.skirting_products, Path(tmp) / name, name)
+            out = write_outputs(a, job.est, template, pm.finish_products, pm.skirting_products,
+                                Path(tmp) / name, name, new_products=new)
             zpath = Path(tmp) / f"{name}.zip"
             with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED) as z:
                 for p in (out.est, out.calback, out.review, out.readme):
                     z.write(p, f"{name}/{p.name}")
             png = render_preview(a, Path(tmp) / "preview.png", highlight=set(pm.finish_products))
-            for field, path in (("output", zpath), ("preview", png)):
-                old = getattr(pm, field)
-                if old:
-                    old.delete(save=False)
-                with path.open("rb") as f:
-                    getattr(pm, field).save(f"{pm.pk}-{path.name}", File(f), save=False)
+            _save_file(pm, "output", zpath)
+            _save_file(pm, "preview", png)
+        pm.summary["preview_for"] = sorted(pm.finish_products)
         pm.written = {
             "rooms": out.written,
             "area_m2": out.written_m2,
             "left_out_rooms": len(out.left_out),
             "left_out_m2": round(sum(r.area for r in out.left_out), 2),
+            "new_products": [p.name for p in new],
+            "built_on": job.label,
         }
         pm.status, pm.error = Premeasure.Status.DONE, ""
         pm.save()
-        _remember_products(pm)
     except Exception as exc:
         _fail(pm, exc)
-
-
-def _remember_products(pm: Premeasure) -> None:
-    """Keep the confirmed products on the project, so the next drawing starts from them."""
-    desc = {f["code"]: f["description"] for f in pm.summary["finishes"]}
-    suggested = {f["code"] for f in pm.summary["finishes"] if f.get("suggestion")}
-    chosen = {**pm.finish_products, **pm.skirting_products}
-    for code in desc:
-        material = chosen.get(code, "")  # "" records that a suggested finish was left out
-        if not material and code not in suggested and not pm.project.products.filter(finish_code=code[:30]).exists():
-            continue
-        Product.objects.update_or_create(
-            project=pm.project, finish_code=code[:30],
-            defaults={"callidus_material": material[:200], "name": (desc.get(code) or material or code)[:200],
-                      "spec_source": f"Confirmed on {pm.title}"[:200]},
-        )
-
-

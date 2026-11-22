@@ -114,3 +114,32 @@ def test_long_room_name_reads_back(cashel, tmp_path):
     out.write_bytes(build_job(load_template(cashel), rooms))
     names = [r.name for r in read_est(out).rooms]
     assert names[1] == rooms[1].name and len(names) == 3
+
+
+def test_new_products_are_added_and_rooms_can_use_them(cashel, tmp_path):
+    from dataclasses import replace
+
+    from premeasure_engine.callidus.material_writer import NewProduct, existing_products, extend_template
+
+    kinds = {e.name: e for e in existing_products(cashel)}
+    assert kinds["FF8 - Forbo Concrete Neptune 3756"].kind == "sheet" and kinds["FF8 - Forbo Concrete Neptune 3756"].copyable
+    assert kinds["125mm coved skirting"].kind == "edge"
+    assert kinds["FF1 - 500mm x 500mm Carpet Tile (Interface Output loop Azure 4219010)"].kind == "tile"
+
+    new = [NewProduct("P2 FF7 - Marmoleum Concrete Blue Ice 3753", "FF8 - Forbo Concrete Neptune 3756", (140, 170, 200)),
+           NewProduct("Coved skirting ™ test", "125mm coved skirting")]
+    t, index = extend_template(cashel, new)
+    old = load_template(cashel)
+    assert t.room_class == old.room_class + 4 and t.n_lists == old.n_lists + 2
+    rooms = _rooms(cashel)[:4]
+    rooms[0] = replace(rooms[0], material=index[new[0].name])
+    out = tmp_path / "new.est"
+    out.write_bytes(build_job(t, rooms))
+    est = read_est(out)
+    names = {m.name: m.index for m in est.materials}
+    assert names == index
+    assert est.rooms[0].material.name == new[0].name
+    assert len(est.rooms) == 4
+    # the copy keeps every setting except name, ID, colour, number and back reference
+    data = out.read_bytes()
+    assert data.count(b"P2 FF7 - Marmoleum Concrete Blue Ice 3753") == 1

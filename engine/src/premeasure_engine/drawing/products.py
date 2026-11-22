@@ -47,6 +47,7 @@ def suggest_materials(entries, material_names: list[str]) -> list[Suggestion]:
     for e in entries:
         b = _norm(e.code.split(" (")[0])
         siblings.setdefault(b, []).append((e.code, _tokens(e.description)[1]))
+    all_codes = set().union(*(_tokens(e.description)[0] for e in entries)) if entries else set()
     for e in entries:
         codes, words = _tokens(e.description)
         base = _norm(e.code.split(" (")[0])
@@ -58,6 +59,9 @@ def suggest_materials(entries, material_names: list[str]) -> list[Suggestion]:
             others = set().union(*(w for c, w in siblings[base] if c != e.code)) - words
             words = words - set.intersection(*(w for _, w in siblings[base]))
         best = (0.0, None, "")
+        # products whose product number the description names: if there are any, a
+        # matching finish code alone does not outweigh them (contractors renumber)
+        named = {n for n in material_names if codes & _tokens(n)[0]}
         for name in material_names:
             mc, mw = _tokens(name)
             shared_codes = codes & mc
@@ -66,11 +70,13 @@ def suggest_materials(entries, material_names: list[str]) -> list[Suggestion]:
             shared_words = words & mw
             if mw & others:
                 continue
+            if (mc & (all_codes - codes)) and not shared_codes:
+                continue  # its product number is written against another finish on this legend
             score = 3 * len(shared_codes) + 1.5 * len(loose) + len(shared_words)
             lead = _norm(name.split(" ", 1)[0])
             # product numbers on both sides that disagree outweigh a matching finish code
             # (a contractor may number its finishes differently from the architect)
-            clash = bool(codes and mc and not (shared_codes or loose))
+            clash = bool(codes and mc and not (shared_codes or loose)) or bool(named and name not in named)
             if e.custom_code and lead == base and clash:
                 score = 0
             elif e.custom_code and lead == base and (not shared or shared_words):

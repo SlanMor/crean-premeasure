@@ -41,21 +41,59 @@ class Level(models.Model):
 
 
 class Product(models.Model):
-    """An approved product for a finish code on this project."""
+    """A product the tender uses, set up once per project (Project setup).
+
+    The name is how it appears in Callidus. If the project's Callidus job (or
+    the house template) already has a product of that name it is used as it
+    is; otherwise the platform adds it, copying the roll and waste settings
+    of ``settings_from``, a product already in that job."""
+
+    class Kind(models.TextChoices):
+        FLOOR = "floor", "Floor finish"
+        SKIRTING = "skirting", "Skirting or edge"
 
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="products")
-    finish_code = models.CharField(max_length=30, help_text="Code on the drawing, for example F1-D or FF7.")
-    name = models.CharField(max_length=200)
+    finish_code = models.CharField(
+        max_length=30, blank=True, help_text="Code on the drawings, for example F1-D or FF7."
+    )
+    kind = models.CharField(max_length=10, choices=Kind.choices, default=Kind.FLOOR)
+    name = models.CharField("product name in Callidus", max_length=200)
+    fill = models.CharField("colour", max_length=7, blank=True, help_text="Colour shown in Callidus, #rrggbb.")
+    settings_from = models.CharField(
+        max_length=200, blank=True,
+        help_text="A product already in the Callidus job whose roll and waste settings a new product copies.",
+    )
     colour = models.CharField(max_length=100, blank=True)
-    callidus_material = models.CharField(max_length=200, blank=True)
     spec_source = models.CharField(max_length=200, blank=True, help_text="Where this came from, and its date.")
 
     class Meta:
-        ordering = ["project", "finish_code"]
-        unique_together = [("project", "finish_code")]
+        ordering = ["project", "kind", "finish_code", "name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["project", "finish_code"], condition=~models.Q(finish_code=""), name="one_product_per_code"
+            )
+        ]
 
     def __str__(self) -> str:
-        return f"{self.finish_code}: {self.name}"
+        return f"{self.finish_code}: {self.name}" if self.finish_code else self.name
+
+    def save(self, *args, **kwargs):
+        # Callidus uses the Windows character set: keep names to what it can show
+        import unicodedata
+
+        name = unicodedata.normalize("NFKC", self.name).strip()
+        self.name = name.encode("cp1252", "replace").decode("cp1252").replace("<", "(").replace(">", ")")
+        super().save(*args, **kwargs)
+
+    @property
+    def rgb(self) -> tuple[int, int, int] | None:
+        h = self.fill.lstrip("#")
+        if len(h) != 6:
+            return None
+        try:
+            return tuple(int(h[i : i + 2], 16) for i in (0, 2, 4))
+        except ValueError:
+            return None
 
 
 class Upload(models.Model):
@@ -109,18 +147,24 @@ class Job(models.Model):
 
 
 class BackgroundTemplate(models.Model):
-    """A one-sheet Callidus .CalBack used as the container for new backgrounds.
+    """The house Callidus template, set up once in the admin.
 
-    Any Crean .CalBack with a single sheet will do: we keep its header and swap
-    in the drawing. Used when the project's own .CalBack has several sheets or
-    none was uploaded. Set up once in the admin."""
+    The .est is the starting job for projects with no Callidus job of their
+    own: its products are the ones new products copy their settings from. The
+    .CalBack must have one sheet; it is the container new backgrounds go in
+    (only its header is kept). Any Crean job will do for both."""
 
-    file = models.FileField(upload_to="templates/")
+    file = models.FileField("background (.CalBack)", upload_to="templates/")
+    est = models.FileField(
+        "Callidus job (.est)", upload_to="templates/", blank=True,
+        help_text="A Crean job with the usual product types (sheet, coved skirting) set up.",
+    )
     note = models.CharField(max_length=200, blank=True)
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["-uploaded_at"]
+        verbose_name = "Callidus template"
 
     def __str__(self) -> str:
         return self.note or self.file.name
@@ -142,8 +186,8 @@ class Premeasure(models.Model):
     drawing = models.ForeignKey(Upload, on_delete=models.PROTECT, related_name="premeasures")
     page = models.PositiveIntegerField(default=1)
     starter = models.ForeignKey(
-        Upload, on_delete=models.PROTECT, related_name="premeasures_started",
-        help_text="Callidus .est holding this job's products.",
+        Upload, on_delete=models.PROTECT, related_name="premeasures_started", null=True, blank=True,
+        help_text="The project's Callidus job this was written from; empty means the house template.",
     )
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.READING)
     summary = models.JSONField(null=True, blank=True)

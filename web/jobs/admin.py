@@ -47,11 +47,22 @@ class JobAdmin(admin.ModelAdmin):
 
 @admin.register(BackgroundTemplate)
 class BackgroundTemplateAdmin(admin.ModelAdmin):
-    list_display = ("__str__", "uploaded_at")
+    list_display = ("__str__", "est", "file", "uploaded_at")
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
+        from premeasure_engine.callidus.material_writer import existing_products
         from premeasure_engine.premeasure import calback_sheets
+
+        if obj.est:
+            try:
+                kinds = {e.kind for e in existing_products(obj.est.path) if e.copyable}
+            except Exception as exc:
+                self.message_user(request, f"The .est could not be read ({exc}).", messages.ERROR)
+                return
+            for kind, what in (("sheet", "sheet product"), ("edge", "coved skirting or other edge product")):
+                if kind not in kinds:
+                    self.message_user(request, f"The .est has no {what} that new products can copy.", messages.WARNING)
 
         try:
             n = calback_sheets(obj.file.path)

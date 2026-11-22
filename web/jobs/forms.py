@@ -3,7 +3,7 @@ from pathlib import Path
 
 from django import forms
 
-from .models import Project, Upload
+from .models import Product, Project, Upload
 
 
 def _check_file(upload, suffix: str, check) -> None:
@@ -32,7 +32,8 @@ class ProjectForm(forms.ModelForm):
 class StarterForm(forms.Form):
     est = forms.FileField(
         label="Callidus job (.est)",
-        help_text="Any Callidus job for this project that already has its products set up. Its rooms are not used.",
+        help_text="A Callidus job for this tender with products already set up. Its products are added to the "
+        "setup and its rooms are not used.",
     )
     calback = forms.FileField(
         label="Its background (.CalBack)", required=False,
@@ -64,22 +65,10 @@ class PremeasureForm(forms.Form):
     page = forms.IntegerField(min_value=1, initial=1, help_text="Page of the PDF with the floor plan.")
     level = forms.CharField(max_length=100, required=False, help_text="For example Ground floor.")
     revision = forms.CharField(max_length=30, required=False)
-    starter = forms.ModelChoiceField(
-        queryset=Upload.objects.none(), label="Products from",
-        help_text="The Callidus job whose products this drawing is measured in.",
-    )
     title = forms.CharField(
         max_length=120, required=False, label="Name for the Callidus file",
         help_text="Leave blank to use the project code, level and drawing name.",
     )
-
-    def __init__(self, *args, project: Project, **kwargs):
-        super().__init__(*args, **kwargs)
-        qs = project.uploads.filter(kind=Upload.Kind.CALLIDUS_EST).order_by("-uploaded_at")
-        self.fields["starter"].queryset = qs
-        self.fields["starter"].label_from_instance = lambda u: u.filename
-        if qs.exists():
-            self.fields["starter"].initial = qs.first().pk
 
     def clean_drawing(self):
         from premeasure_engine.premeasure import pdf_pages
@@ -97,13 +86,12 @@ class PremeasureForm(forms.Form):
 
 
 class ProductsForm(forms.Form):
-    """One choice per finish on the drawing: a Callidus product, or leave out."""
+    """One choice per finish on the drawing: a project product, or leave out."""
 
     LEAVE_OUT = ""
 
-    def __init__(self, *args, summary: dict, floors: dict, skirtings: dict, **kwargs):
+    def __init__(self, *args, summary: dict, floors: dict, skirtings: dict, materials: list[str], **kwargs):
         super().__init__(*args, **kwargs)
-        materials = summary["materials"]
         for f in summary["finishes"]:
             if f["kind"] == "floor":
                 none = "Leave out (not priced)"
@@ -132,3 +120,60 @@ class ProductsForm(forms.Form):
             if value:
                 (floors if f["kind"] == "floor" else skirtings)[f["code"]] = value
         return floors, skirtings
+
+
+DEFAULT_FILL = "#c8c8c8"
+
+
+class SetupProductForm(forms.ModelForm):
+    class Meta:
+        model = Product
+        fields = ["finish_code", "kind", "name", "fill", "settings_from"]
+        widgets = {"fill": forms.TextInput(attrs={"type": "color"})}
+
+    def __init__(self, *args, settings_choices: list[str] = (), existing: set[str] = frozenset(), **kwargs):
+        super().__init__(*args, **kwargs)
+        self.existing = existing
+        current = self.instance.settings_from if self.instance and self.instance.pk else ""
+        names = list(settings_choices) + ([current] if current and current not in settings_choices else [])
+        self.fields["settings_from"] = forms.ChoiceField(
+            choices=[("", "Choose")] + [(n, n) for n in names], required=False, label="Copy settings from"
+        )
+        self.fields["finish_code"].widget.attrs["placeholder"] = "code"
+        self.fields["fill"].required = False
+        # a colour box cannot be empty, so show grey rather than black for "no colour yet"
+        if not (self.instance and self.instance.fill):
+            self.initial["fill"] = DEFAULT_FILL
+
+    @property
+    def in_job(self) -> bool:
+        return bool(self.instance and self.instance.name in self.existing)
+
+    def clean_fill(self):
+        v = self.cleaned_data.get("fill") or ""
+        return v if v == "" or (len(v) == 7 and v.startswith("#")) else ""
+
+
+class _SetupBase(forms.BaseModelFormSet):
+    def clean(self):
+        super().clean()
+        from .setup import norm
+
+        seen: dict[str, str] = {}
+        names: set[str] = set()
+        for f in self.forms:
+            if not hasattr(f, "cleaned_data") or f in self.deleted_forms or not f.cleaned_data.get("name"):
+                continue
+            code, name = f.cleaned_data.get("finish_code") or "", f.cleaned_data["name"]
+            if code:
+                if norm(code) in seen:
+                    raise forms.ValidationError(f"Finish code {code} is used twice ({seen[norm(code)]} and {name}).")
+                seen[norm(code)] = name
+            if name in names:
+                raise forms.ValidationError(f"Two products are called {name!r}.")
+            names.add(name)
+
+
+SetupFormSet = forms.modelformset_factory(
+    Product, form=SetupProductForm, formset=_SetupBase, extra=2, can_delete=True
+)
