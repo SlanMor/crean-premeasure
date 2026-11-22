@@ -1,6 +1,6 @@
 # Callidus file format: what we know
 
-Decoded in November 2026 from nine floor files across four Crean jobs. Reading is proven (Crean's spreadsheets reproduce exactly, apart from rows explained by later edits). Editing is proven: Callidus opens our edited files and reads renames, finish changes and moved outlines as intended (tests T1 to T4). Writing a whole room from scratch is test T5.
+Decoded in November 2026 from nine floor files across four Crean jobs. Reading is proven (Crean's spreadsheets reproduce exactly, apart from rows explained by later edits). Editing is proven: Callidus opens our edited files and reads renames, finish changes and moved outlines as intended (tests T1 to T4). Writing is proven: T5 (one room written from scratch) and T6 (a whole job written from scratch) both open, and Callidus's own export of T6 matches our figures for every room.
 
 ## .est (estimate)
 
@@ -34,7 +34,7 @@ A Microsoft MFC `CArchive` binary.
   - Then uint16 object number of the room that owns the zone (a reference back to the room, not to the zone; T6 failed with "contained an unexpected object" when this pointed at the zone), uint16 material, three empty lists (`e8030000 00000000`, `e8030000 00000000`, `e8030000`), uint16 0 for no layout pieces, and uint32 1000.
   - The zone's edge data either copies the room's edges or is all zero; quantities come from the room's edges.
 - **Edge data (18 bytes per edge, from that vertex to the next):**
-  - byte 0 = 1: edge is open (no wall).
+  - byte 0 = 1: edge is open, which Callidus counts as a door. Confirmed by the T6 export: for all 51 rooms, its doors column is the number of open edges, doorLength their total length, and wall length the perimeter minus doorLength.
   - byte 8 = 2: another edge flag, excluded from room-level skirting; meaning not confirmed (possibly doorway).
   - byte 12: material number of an edge product (for example 125mm coved skirting, matwell frame), 0 if none.
   - bytes 14 to 17: float32 0.2 when an edge product is set (meaning not yet known).
@@ -89,7 +89,13 @@ T5 result (22 November 2026): passed. The file opens with no errors. T5 TEST ROO
 
 T6 (22 November 2026): the whole Cashel job written by our writer: Crean's finishes, all 51 sheet-finish rooms, no layouts. T6a uses the original background, T6b one rendered from the PDF. Left out: two FF1 carpet tile rooms (tile zones not written yet) and the three NetZone cut-outs inside "GF Circulation West Design 1", which is written whole. Expected net totals as the original except FF8: 342.92 m² (333.02 plus the 9.90 m² of cut-outs).
 
-T6 result (22 November 2026), after the back-reference fix: both files open. T6b's background, made from the PDF, displays correctly and the rooms sit on it. F06 reads 57.14 m² and 31.36 m, and FF8 totals 342.92 m², as expected. Every other total shown matched once two rooms were accounted for: picking a finish from the material box while a room is selected changes that room's finish, and the estimator had moved G01 (97.28 m²) and F06 (57.14 m²) that way (FF2 134.60 = 37.32 + 97.28; FF3 169.51 = 15.09 + 97.28 + 57.14; FF10 173.08 = 115.94 + 57.14). Still to confirm: skirting and matwell frame totals, and laying out a room in the written file.
+T6 result (22 November 2026), after the back-reference fix: both files open. T6b's background, made from the PDF, displays correctly and the rooms sit on it. F06 reads 57.14 m² and 31.36 m, and FF8 totals 342.92 m², as expected. Every other total shown matched once two rooms were accounted for: picking a finish from the material box while a room is selected changes that room's finish, and the estimator had moved G01 (97.28 m²) and F06 (57.14 m²) that way (FF2 134.60 = 37.32 + 97.28; FF3 169.51 = 15.09 + 97.28 + 57.14; FF10 173.08 = 115.94 + 57.14). 
+
+T6 sign-off (22 November 2026): in a copy of T6a, every finish was laid out with F9 (Quantify: Cuts and fillers), saved and reopened, then exported (Σ, "Data as simple Text"). The export cannot run until every finish has been laid out ("Material ... not quantified"). Against our figures:
+- all 51 rooms: net area and perimeter match to 0.001;
+- all 17 skirting and matwell frame rows match per room; totals 125mm coved skirting 90.529 m and Matwell Frame 13.548 m, as expected;
+- doors, door length and wall length match the open edges in every room.
+The only differences were two rooms the estimator had moved to another finish using the material box (Circulation South East Entrance to FF8, G11 to Matwell Frame). Rooms with no name show in Callidus as a number (here 24 and 29).
 
 Practical note: Callidus would not open any file from the estimator's Z: drive (a folder whose name it shows as "Callidus?"), giving "Cannot open file". The same file opened from a local folder. Delivered files need to be saved to a local folder with a plain name before opening.
 
