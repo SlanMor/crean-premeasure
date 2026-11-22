@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Crean pre-measure{% endblock %}</title>
+<style>
+  :root { --ink:#1d2733; --muted:#5d6b7a; --line:#dde3ea; --bg:#f5f7f9; --card:#fff; --accent:#1f4e79;
+          --ok:#16794a; --okbg:#e6f4ec; --warn:#9a5b00; --warnbg:#fdf1de; --bad:#a32020; --badbg:#fbe7e7; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; color:var(--ink); background:var(--bg); }
+  header { background:var(--accent); color:#fff; }
+  header .wrap { display:flex; align-items:center; gap:24px; padding:12px 24px; }
+  header a { color:#fff; text-decoration:none; }
+  header .brand { font-weight:600; font-size:17px; }
+  header .right { margin-left:auto; display:flex; gap:16px; align-items:center; font-size:14px; }
+  header form { margin:0; }
+  header button { background:none; border:0; color:#fff; cursor:pointer; font:inherit; padding:0; text-decoration:underline; }
+  .wrap { max-width:1200px; margin:0 auto; padding:24px; }
+  h1 { font-size:24px; margin:0 0 4px; } h2 { font-size:18px; margin:0 0 12px; }
+  .sub { color:var(--muted); margin:0 0 20px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:20px; margin-bottom:20px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; }
+  .stat { background:var(--bg); border-radius:6px; padding:12px 14px; }
+  .stat b { display:block; font-size:22px; } .stat span { color:var(--muted); font-size:13px; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:13px; }
+  td.num, th.num { text-align:right; white-space:nowrap; }
+  a { color:var(--accent); }
+  .btn { display:inline-block; background:var(--accent); color:#fff; border:0; border-radius:6px; padding:9px 16px;
+         font:inherit; font-weight:600; cursor:pointer; text-decoration:none; }
+  .btn.secondary { background:#fff; color:var(--accent); border:1px solid var(--accent); }
+  .pill { display:inline-block; border-radius:999px; padding:1px 9px; font-size:12px; font-weight:600; white-space:nowrap; }
+  .pill.ok { background:var(--okbg); color:var(--ok); } .pill.warn { background:var(--warnbg); color:var(--warn); }
+  .pill.bad { background:var(--badbg); color:var(--bad); } .pill.off { background:var(--bg); color:var(--muted); }
+  .msg { padding:10px 14px; border-radius:6px; margin-bottom:16px; }
+  .msg.success { background:var(--okbg); color:var(--ok); } .msg.error { background:var(--badbg); color:var(--bad); }
+  .note { background:var(--warnbg); border-radius:6px; padding:12px 14px; margin-bottom:16px; }
+  label { font-weight:600; font-size:14px; display:block; margin-bottom:4px; }
+  input[type=text], input[type=number], input[type=password], select, textarea {
+    width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:6px; font:inherit; background:#fff; }
+  select { max-width:100%; }
+  .field { margin-bottom:14px; } .help { color:var(--muted); font-size:13px; margin-top:3px; }
+  .errorlist { color:var(--bad); margin:4px 0 0; padding:0; list-style:none; font-size:13px; }
+  .swatch { display:inline-block; width:18px; height:18px; border-radius:3px; border:1px solid rgba(0,0,0,.2); vertical-align:middle; }
+  .reasons { color:var(--muted); font-size:13px; }
+  .muted { color:var(--muted); }
+  .preview img { width:100%; border:1px solid var(--line); border-radius:6px; }
+  .key span { margin-right:14px; font-size:13px; }
+  .row-off td { color:var(--muted); }
+  details summary { cursor:pointer; }
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <a class="brand" href="{% url 'home' %}">Crean pre-measure</a>
+  {% if user.is_authenticated %}
+  <div class="right">
+    <span>{{ user.get_full_name|default:user.username }}</span>
+    {% if user.is_staff %}<a href="{% url 'admin:index' %}">Admin</a>{% endif %}
+    <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button>Sign out</button></form>
+  </div>
+  {% endif %}
+</div></header>
+<main class="wrap">
+  {% for m in messages %}<div class="msg {{ m.tags }}">{{ m }}</div>{% endfor %}
+  {% block content %}{% endblock %}
+</main>
+</body>
+</html>

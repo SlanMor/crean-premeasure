@@ -1,0 +1,14 @@
+{% extends "jobs/base.html" %}
+{% block title %}Sign in · Crean pre-measure{% endblock %}
+{% block content %}
+<div class="card" style="max-width:420px;margin:40px auto">
+  <h1>Sign in</h1>
+  <p class="sub">Use the account the administrator set up for you.</p>
+  {% if form.errors %}<div class="msg error">That username and password did not match.</div>{% endif %}
+  <form method="post">{% csrf_token %}
+    {% for field in form %}{% include "jobs/_field.html" %}{% endfor %}
+    <input type="hidden" name="next" value="{{ next }}">
+    <button class="btn">Sign in</button>
+  </form>
+</div>
+{% endblock %}

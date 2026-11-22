@@ -1,0 +1,73 @@
+{% extends "jobs/base.html" %}
+{% block title %}{{ project.code }} · Crean pre-measure{% endblock %}
+{% block content %}
+<p class="muted"><a href="{% url 'home' %}">Projects</a></p>
+<h1>{{ project.code }} {{ project.name }}</h1>
+<p class="sub">{% if project.client %}{{ project.client }}{% endif %}{% if project.main_contractor %} · {{ project.main_contractor }}{% endif %}{% if project.site %} · {{ project.site }}{% endif %}</p>
+
+<div class="card">
+  <h2>Drawings</h2>
+  {% if premeasures %}
+  <table>
+    <tr><th>Name</th><th>Level</th><th>Drawing</th><th>Status</th><th>Added</th></tr>
+    {% for pm in premeasures %}
+    <tr><td><a href="{% url 'premeasure' pm.pk %}">{{ pm.title }}</a></td><td>{{ pm.level }}</td>
+        <td class="muted">{{ pm.drawing.drawing_number }}{% if pm.drawing.revision %} rev {{ pm.drawing.revision }}{% endif %}</td>
+        <td>{% include "jobs/_status.html" %}</td><td class="muted">{{ pm.created_at|date:"j M Y H:i" }}</td></tr>
+    {% endfor %}
+  </table>
+  {% else %}<p class="muted">No drawings yet.</p>{% endif %}
+</div>
+
+{% if starters %}
+<div class="card">
+  <h2>Add a finishes drawing</h2>
+  <form method="post" action="{% url 'new_premeasure' project.pk %}" enctype="multipart/form-data">{% csrf_token %}
+    <div class="grid">
+      {% with field=form.drawing %}{% include "jobs/_field.html" %}{% endwith %}
+      {% with field=form.page %}{% include "jobs/_field.html" %}{% endwith %}
+      {% with field=form.level %}{% include "jobs/_field.html" %}{% endwith %}
+      {% with field=form.revision %}{% include "jobs/_field.html" %}{% endwith %}
+    </div>
+    <div class="grid">
+      {% with field=form.starter %}{% include "jobs/_field.html" %}{% endwith %}
+      {% with field=form.title %}{% include "jobs/_field.html" %}{% endwith %}
+    </div>
+    <button class="btn">Read the drawing</button>
+    <span class="muted" style="margin-left:10px">Takes one to three minutes. You can leave the page.</span>
+  </form>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Callidus products</h2>
+  <p class="muted">The drawing's finishes are matched to the products in a Callidus job for this project. Upload any job that has the products set up; its rooms are not used.</p>
+  {% if starters %}
+  <table style="margin-bottom:16px">
+    <tr><th>Callidus job</th><th>Background</th><th>Added</th></tr>
+    {% for s in starters %}
+    <tr><td>{{ s.filename }}</td><td>{% if s.background %}Yes{% else %}<span class="muted">No</span>{% endif %}</td>
+        <td class="muted">{{ s.uploaded_at|date:"j M Y" }}</td></tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+  <form method="post" action="{% url 'add_starter' project.pk %}" enctype="multipart/form-data">{% csrf_token %}
+    <div class="grid">
+      {% with field=starter_form.est %}{% include "jobs/_field.html" %}{% endwith %}
+      {% with field=starter_form.calback %}{% include "jobs/_field.html" %}{% endwith %}
+    </div>
+    <button class="btn {% if starters %}secondary{% endif %}">Add Callidus job</button>
+  </form>
+</div>
+
+{% if products %}
+<div class="card">
+  <h2>Products confirmed on this project</h2>
+  <p class="muted">Used as the starting choice for each new drawing.</p>
+  <table>
+    <tr><th>Finish</th><th>Callidus product</th><th>From</th></tr>
+    {% for p in products %}<tr><td>{{ p.finish_code }}</td><td>{{ p.callidus_material }}</td><td class="muted">{{ p.spec_source }}</td></tr>{% endfor %}
+  </table>
+</div>
+{% endif %}
+{% endblock %}
