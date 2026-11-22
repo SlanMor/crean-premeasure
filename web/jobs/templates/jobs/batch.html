@@ -1,0 +1,36 @@
+{% extends "jobs/base.html" %}
+{% block title %}Drawings · {{ project.code }}{% endblock %}
+{% block content %}
+<p class="muted"><a href="{% url 'project' project.pk %}">{{ project.code }} {{ project.name }}</a></p>
+<h1>Drawings added {{ batch.created_at|date:"j M Y H:i" }}</h1>
+<p class="sub">{% if busy %}Being read one after another. You can close this page; {% if batch.notify and user.email %}you will get an email at {{ user.email }} when they are all done{% else %}come back later{% endif %}.{% else %}All done.{% endif %}
+{% if batch.auto_write %} Callidus files are written automatically where every finish has a product.{% endif %}</p>
+<div class="card">
+  <div class="grid">
+    <div class="stat"><b>{{ counts.done }}</b><span>Callidus files ready</span></div>
+    <div class="stat"><b>{{ counts.review }}</b><span>ready for review</span></div>
+    <div class="stat"><b>{{ counts.busy }}</b><span>still to read</span></div>
+    <div class="stat"><b>{{ counts.failed }}</b><span>failed</span></div>
+  </div>
+</div>
+<div class="card">
+  {% if drawings %}
+  <table>
+    <tr><th>Drawing</th><th>Page</th><th>Status</th><th></th></tr>
+    {% for pm in drawings %}
+    <tr><td><a href="{% url 'premeasure' pm.pk %}">{{ pm.title }}</a></td><td>{{ pm.page }}</td><td>{% include "jobs/_status.html" %}</td>
+      <td class="num">{% if pm.status == "done" %}<a href="{% url 'download' pm.pk %}">Download</a>{% elif pm.status == "review" %}<a href="{% url 'premeasure' pm.pk %}">Review</a>{% endif %}</td></tr>
+    {% endfor %}
+  </table>
+  {% else %}<p class="muted">Finding the plan pages in the PDF…</p>{% endif %}
+</div>
+{% if busy %}
+<script>
+  setInterval(function () {
+    fetch("{% url 'batch_status' batch.pk %}").then(r => r.json()).then(d => {
+      if (!d.busy || d.statuses.join() !== "{% for d in drawings %}{{ d.status }}{% if not forloop.last %},{% endif %}{% endfor %}") location.reload();
+    });
+  }, 5000);
+</script>
+{% endif %}
+{% endblock %}

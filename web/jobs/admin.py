@@ -1,6 +1,6 @@
 from django.contrib import admin, messages
 
-from .models import BackgroundTemplate, Job, Level, Premeasure, Product, Project, Upload
+from .models import BackgroundTemplate, Batch, Job, LibraryProduct, Level, MeasuringRules, Premeasure, Product, Project, Upload
 from .queue import get_queue
 
 
@@ -78,3 +78,14 @@ class PremeasureAdmin(admin.ModelAdmin):
     list_display = ("title", "project", "status", "created_by", "created_at")
     list_filter = ("status", "project")
     readonly_fields = ("summary", "written", "error", "created_at", "updated_at")
+
+
+@admin.register(LibraryProduct)
+class LibraryProductAdmin(admin.ModelAdmin):
+    list_display = ("name", "type", "supplier", "wastage_pct", "active")
+    list_filter = ("type", "active")
+    search_fields = ("name", "supplier", "product_number")
+
+
+admin.site.register(MeasuringRules)
+admin.site.register(Batch)

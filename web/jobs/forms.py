@@ -3,7 +3,9 @@ from pathlib import Path
 
 from django import forms
 
-from .models import Product, Project, Upload
+from django.contrib.auth.models import User
+
+from .models import BackgroundTemplate, Batch, LibraryProduct, MeasuringRules, Product, Project, Upload
 
 
 def _check_file(upload, suffix: str, check) -> None:
@@ -60,47 +62,70 @@ class StarterForm(forms.Form):
         return f
 
 
-class PremeasureForm(forms.Form):
-    drawing = forms.FileField(label="Finishes drawing (PDF)")
-    page = forms.IntegerField(min_value=1, initial=1, help_text="Page of the PDF with the floor plan.")
-    level = forms.CharField(max_length=100, required=False, help_text="For example Ground floor.")
-    revision = forms.CharField(max_length=30, required=False)
-    title = forms.CharField(
-        max_length=120, required=False, label="Name for the Callidus file",
-        help_text="Leave blank to use the project code, level and drawing name.",
-    )
+class MultipleFileInput(forms.ClearableFileInput):
+    allow_multiple_selected = True
 
-    def clean_drawing(self):
+
+class MultipleFileField(forms.FileField):
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault("widget", MultipleFileInput(attrs={"accept": ".pdf"}))
+        super().__init__(*args, **kwargs)
+
+    def clean(self, data, initial=None):
+        single = super().clean
+        if isinstance(data, (list, tuple)):
+            return [single(d, initial) for d in data]
+        return [single(data, initial)]
+
+
+class UploadDrawingsForm(forms.Form):
+    drawings = MultipleFileField(
+        label="Finishes drawings (PDF)",
+        help_text="Choose one or several. A PDF with several pages is fine: each page that looks like a "
+        "finishes plan is read.",
+    )
+    level = forms.CharField(max_length=100, required=False, help_text="Optional, for example Ground floor.")
+    revision = forms.CharField(max_length=30, required=False)
+    auto_write = forms.BooleanField(
+        label="Write the Callidus files automatically", required=False, initial=True,
+        help_text="For each drawing where every finish has a product in the project setup. "
+        "The others wait for you to review.",
+    )
+    notify = forms.BooleanField(label="Email me when they are all done", required=False, initial=True)
+
+    def clean_drawings(self):
         from premeasure_engine.premeasure import pdf_pages
 
-        f = self.cleaned_data["drawing"]
-        self.pages = _check_file(f, ".pdf", pdf_pages)
-        return f
-
-    def clean(self):
-        data = super().clean()
-        pages = getattr(self, "pages", None)
-        if pages and data.get("page") and data["page"] > pages:
-            self.add_error("page", f"The PDF has {pages} page{'s' if pages > 1 else ''}.")
-        return data
+        files = self.cleaned_data["drawings"]
+        self.pages = {}
+        for f in files:
+            try:
+                self.pages[f.name] = _check_file(f, ".pdf", pdf_pages)
+            except forms.ValidationError as exc:
+                raise forms.ValidationError(f"{f.name}: {exc.messages[0]}") from exc
+        return files
 
 
 class ProductsForm(forms.Form):
-    """One choice per finish on the drawing: a project product, or leave out."""
+    """One choice per finish on the drawing: a product from the list, or leave out.
+    The project setup gives the starting choice."""
 
     LEAVE_OUT = ""
 
-    def __init__(self, *args, summary: dict, floors: dict, skirtings: dict, materials: list[str], **kwargs):
+    def __init__(self, *args, summary: dict, floors: dict, skirtings: dict, **kwargs):
         super().__init__(*args, **kwargs)
+        products = list(LibraryProduct.objects.filter(active=True).values_list("name", "type"))
+        floor_names = [n for n, t in products if t in LibraryProduct.FLOOR_TYPES]
+        edge_names = [n for n, t in products if t not in LibraryProduct.FLOOR_TYPES]
         for f in summary["finishes"]:
             if f["kind"] == "floor":
-                none = "Leave out (not priced)"
-                initial = floors.get(f["code"], "")
+                none, initial, names = "Leave out (not priced)", floors.get(f["code"], ""), floor_names
             else:
-                none = "Not on room edges"
-                initial = skirtings.get(f["code"], "")
+                none, initial, names = "Not on room edges", skirtings.get(f["code"], ""), edge_names
+            if initial and initial not in names:
+                names = names + [initial]
             self.fields[self.key(f)] = forms.ChoiceField(
-                choices=[(self.LEAVE_OUT, none)] + [(m, m) for m in materials],
+                choices=[(self.LEAVE_OUT, none)] + [(m, m) for m in names],
                 required=False, initial=initial, label=f["code"],
             )
         self.finishes = summary["finishes"]
@@ -122,36 +147,17 @@ class ProductsForm(forms.Form):
         return floors, skirtings
 
 
-DEFAULT_FILL = "#c8c8c8"
-
-
-class SetupProductForm(forms.ModelForm):
+class SetupRowForm(forms.ModelForm):
     class Meta:
         model = Product
-        fields = ["finish_code", "kind", "name", "fill", "settings_from"]
-        widgets = {"fill": forms.TextInput(attrs={"type": "color"})}
+        fields = ["finish_code", "library"]
 
-    def __init__(self, *args, settings_choices: list[str] = (), existing: set[str] = frozenset(), **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.existing = existing
-        current = self.instance.settings_from if self.instance and self.instance.pk else ""
-        names = list(settings_choices) + ([current] if current and current not in settings_choices else [])
-        self.fields["settings_from"] = forms.ChoiceField(
-            choices=[("", "Choose")] + [(n, n) for n in names], required=False, label="Copy settings from"
-        )
+        self.fields["library"].queryset = LibraryProduct.objects.filter(active=True)
+        self.fields["library"].required = False
+        self.fields["library"].empty_label = "Not chosen yet"
         self.fields["finish_code"].widget.attrs["placeholder"] = "code"
-        self.fields["fill"].required = False
-        # a colour box cannot be empty, so show grey rather than black for "no colour yet"
-        if not (self.instance and self.instance.fill):
-            self.initial["fill"] = DEFAULT_FILL
-
-    @property
-    def in_job(self) -> bool:
-        return bool(self.instance and self.instance.name in self.existing)
-
-    def clean_fill(self):
-        v = self.cleaned_data.get("fill") or ""
-        return v if v == "" or (len(v) == 7 and v.startswith("#")) else ""
 
 
 class _SetupBase(forms.BaseModelFormSet):
@@ -159,21 +165,102 @@ class _SetupBase(forms.BaseModelFormSet):
         super().clean()
         from .setup import norm
 
-        seen: dict[str, str] = {}
-        names: set[str] = set()
+        seen: set[str] = set()
         for f in self.forms:
-            if not hasattr(f, "cleaned_data") or f in self.deleted_forms or not f.cleaned_data.get("name"):
+            if not hasattr(f, "cleaned_data") or f in self.deleted_forms:
                 continue
-            code, name = f.cleaned_data.get("finish_code") or "", f.cleaned_data["name"]
-            if code:
-                if norm(code) in seen:
-                    raise forms.ValidationError(f"Finish code {code} is used twice ({seen[norm(code)]} and {name}).")
-                seen[norm(code)] = name
-            if name in names:
-                raise forms.ValidationError(f"Two products are called {name!r}.")
-            names.add(name)
+            code = f.cleaned_data.get("finish_code") or ""
+            if not code:
+                continue
+            if norm(code) in seen:
+                raise forms.ValidationError(f"Finish code {code} is used twice.")
+            seen.add(norm(code))
 
 
-SetupFormSet = forms.modelformset_factory(
-    Product, form=SetupProductForm, formset=_SetupBase, extra=2, can_delete=True
-)
+SetupFormSet = forms.modelformset_factory(Product, form=SetupRowForm, formset=_SetupBase, extra=2, can_delete=True)
+
+
+class LibraryProductForm(forms.ModelForm):
+    class Meta:
+        model = LibraryProduct
+        fields = ["name", "type", "supplier", "product_number", "colour_name", "fill", "roll_width_m",
+                  "tile_width_mm", "tile_length_mm", "coving_height_mm", "wastage_pct", "round_up",
+                  "spec_reference", "notes", "callidus_settings_from", "active"]
+        widgets = {"fill": forms.TextInput(attrs={"type": "color"}), "notes": forms.Textarea(attrs={"rows": 2})}
+
+    def __init__(self, *args, settings_choices: list[str] = (), **kwargs):
+        super().__init__(*args, **kwargs)
+        current = self.instance.callidus_settings_from if self.instance.pk else ""
+        names = list(settings_choices) + ([current] if current and current not in settings_choices else [])
+        self.fields["callidus_settings_from"] = forms.ChoiceField(
+            choices=[("", "Automatic, by type")] + [(n, n) for n in names], required=False,
+            label="Callidus settings copied from",
+            help_text="Only for a product that is not already in the Callidus template.",
+        )
+        self.fields["fill"].required = False
+        if not self.instance.fill and not self.initial.get("fill"):
+            self.initial["fill"] = "#c8c8c8"  # a colour box cannot be empty: grey, not black
+
+
+class RulesForm(forms.ModelForm):
+    class Meta:
+        model = MeasuringRules
+        exclude = ["project", "updated_at"]
+
+
+class TemplateForm(forms.ModelForm):
+    class Meta:
+        model = BackgroundTemplate
+        fields = ["est", "file", "note"]
+        labels = {"file": "Background (.CalBack)"}
+
+    def clean_est(self):
+        from premeasure_engine.callidus.material_writer import existing_products
+
+        f = self.cleaned_data.get("est")
+        if f and hasattr(f, "chunks"):
+            products = _check_file(f, ".est", existing_products)
+            kinds = {e.kind for e in products if e.copyable}
+            if "sheet" not in kinds:
+                raise forms.ValidationError("This job has no sheet product that new products can copy.")
+            self.warn_no_edge = "edge" not in kinds
+        return f
+
+    def clean_file(self):
+        from premeasure_engine.premeasure import calback_sheets
+
+        f = self.cleaned_data.get("file")
+        if f and hasattr(f, "chunks"):
+            n = _check_file(f, ".CalBack", calback_sheets)
+            if n != 1:
+                raise forms.ValidationError(f"This background has {n} sheets; the template needs one with one sheet.")
+        return f
+
+
+class UserForm(forms.ModelForm):
+    password = forms.CharField(
+        widget=forms.PasswordInput, required=False, min_length=12,
+        help_text="At least 12 characters. Leave blank to keep the current password.",
+    )
+    is_staff = forms.BooleanField(label="Can change settings", required=False,
+                                  help_text="Users, the Callidus template and company measuring rules.")
+
+    class Meta:
+        model = User
+        fields = ["username", "first_name", "last_name", "email", "is_staff", "is_active"]
+        labels = {"is_active": "Can sign in"}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not self.instance.pk:
+            self.fields["password"].required = True
+            self.fields["password"].help_text = "At least 12 characters."
+            self.fields["email"].required = True
+
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        if self.cleaned_data.get("password"):
+            user.set_password(self.cleaned_data["password"])
+        if commit:
+            user.save()
+        return user

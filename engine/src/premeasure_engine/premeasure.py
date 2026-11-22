@@ -44,6 +44,7 @@ class Finish:
     description: str
     fill: tuple[int, int, int] | None
     in_legend: bool
+    custom_code: bool  # the drawing wrote this code itself (F1-A), rather than "FLOOR FINISH TYPE 1"
     amount: float  # m2 for floors, m for skirting, found on this drawing
     rooms: int
     suggestion: str | None
@@ -74,18 +75,45 @@ def pdf_pages(pdf: str | Path) -> int:
         doc.close()
 
 
+def plan_pages(pdf: str | Path) -> list[int]:
+    """Pages that look like finishes plans: a drawing scale and the word
+    "finish" on the sheet. Cover sheets, schedules and details are skipped.
+    Fast: reads the text only."""
+    import re
+
+    import pypdfium2 as pdfium
+
+    doc = pdfium.PdfDocument(str(pdf))
+    try:
+        found = []
+        for i in range(len(doc)):
+            page = doc[i]
+            tp = page.get_textpage()
+            text = tp.get_text_range().upper()
+            tp.close()
+            page.close()
+            if re.search(r"1\s*:\s*\d{2,4}", text) and "FINISH" in text:
+                found.append(i)
+        return found
+    finally:
+        doc.close()
+
+
 def calback_sheets(path: str | Path) -> int:
     return len(read_calback(path).sheets)
 
 
 def analyse(
-    pdf: str | Path, products: str | Path | list[str], page: int = 0, exclude: list[tuple] | None = None
+    pdf: str | Path, products: str | Path | list[str], page: int = 0, exclude: list[tuple] | None = None,
+    min_opening: float | None = None,
 ) -> Analysis:
-    """``products``: the product names to suggest from, or a Callidus .est holding them."""
+    """``products``: the product names to suggest from, or a Callidus .est holding them.
+    ``min_opening``: openings smaller than this (m2) are measured through."""
     pdf = Path(pdf)
     dwg = read_drawing(pdf, page=page)
     legend = read_legend(dwg)
-    rooms, report = find_rooms(dwg, legend, exclude=exclude)
+    kwargs = {} if min_opening is None else {"min_opening": min_opening}
+    rooms, report = find_rooms(dwg, legend, exclude=exclude, **kwargs)
     if isinstance(products, (str, Path)):
         products = [m.name for m in read_est(products).materials]
     materials = [m for m in products if m not in NOT_A_PRODUCT]
@@ -117,6 +145,7 @@ def analyse(
                 description=e.description,
                 fill=tuple(e.fill) if e.fill else None,
                 in_legend=id(e) in in_legend,
+                custom_code=bool(e.custom_code),
                 amount=round(amount, 2),
                 rooms=len(mine),
                 suggestion=s.material if good else None,
@@ -154,7 +183,7 @@ def summary(a: Analysis) -> dict:
         "finishes": [
             {
                 "code": f.code, "kind": f.kind, "description": f.description,
-                "fill": list(f.fill) if f.fill else None, "in_legend": f.in_legend,
+                "fill": list(f.fill) if f.fill else None, "in_legend": f.in_legend, "custom_code": f.custom_code,
                 "amount": f.amount, "rooms": f.rooms, "suggestion": f.suggestion, "why": f.why,
             }
             for f in a.finishes
@@ -181,6 +210,7 @@ class Outputs:
     written: int
     written_m2: float
     left_out: list[Room] = field(default_factory=list)
+    quantities: Path | None = None
 
 
 def write_outputs(
@@ -192,6 +222,7 @@ def write_outputs(
     out_dir: str | Path,
     name: str,
     new_products: list[NewProduct] | None = None,
+    wastage: dict[str, float] | None = None,
 ) -> Outputs:
     """Write the pre-measured job. ``finish_products`` maps a finish code to a
     product name in the starter file, or in ``new_products`` (products added
@@ -227,8 +258,38 @@ def write_outputs(
     review.write_text(_review_csv(a, names, finish_products), encoding="utf-8-sig")
     readme = out_dir / "READ ME FIRST.txt"
     readme.write_text(_readme(a, name, written, left_out, finish_products), encoding="utf-8")
+    quantities = out_dir / f"{name} - quantities.csv"
+    quantities.write_text(
+        _quantities_csv([w.room for w in written], finish_products, skirting_products, wastage or {}),
+        encoding="utf-8-sig",
+    )
     return Outputs(est_path, calback_path, review, readme, len(written),
-                   round(sum(w.room.area for w in written), 2), left_out)
+                   round(sum(w.room.area for w in written), 2), left_out, quantities)
+
+
+def quantities(rooms: list[Room], finish_products: dict[str, str], skirting_products: dict[str, str]) -> dict:
+    """Net quantity per product over the rooms written: m2 for floors, m for skirting."""
+    out: dict[str, tuple[str, float]] = {}
+    for r in rooms:
+        if r.finish is not None and r.finish.code in finish_products:
+            p = finish_products[r.finish.code]
+            out[p] = ("m2", out.get(p, ("m2", 0.0))[1] + r.area)
+        for code, length in r.skirting_lengths().items():
+            if code in skirting_products:
+                p = skirting_products[code]
+                out[p] = ("m", out.get(p, ("m", 0.0))[1] + length)
+    return out
+
+
+def _quantities_csv(rooms, finish_products, skirting_products, wastage: dict[str, float]) -> str:
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["Product", "Unit", "Net quantity", "Wastage %", "Quantity with wastage", "Note"])
+    for product, (unit, net) in sorted(quantities(rooms, finish_products, skirting_products).items()):
+        pct = float(wastage.get(product, 0) or 0)
+        w.writerow([product, unit, f"{net:.2f}", f"{pct:g}", f"{net * (1 + pct / 100):.2f}",
+                    "net from the drawing; Callidus adds cutting waste when the rooms are laid out"])
+    return buf.getvalue()
 
 
 def outline_area(room: Room) -> float:

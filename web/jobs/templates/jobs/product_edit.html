@@ -1,0 +1,43 @@
+{% extends "jobs/base.html" %}
+{% block title %}{% if lib %}{{ lib.name }}{% else %}New product{% endif %} · Crean pre-measure{% endblock %}
+{% block content %}
+<p class="muted"><a href="{% if next %}{{ next }}{% else %}{% url 'products' %}{% endif %}">{% if next %}Back{% else %}Products{% endif %}</a></p>
+<h1>{% if lib %}{{ lib.name }}{% else %}New product{% endif %}</h1>
+<p class="sub">{% if lib %}Used on {{ uses|length }} project{{ uses|length|pluralize }}.{% else %}Added to the product list for every project.{% endif %}</p>
+<form method="post">{% csrf_token %}
+<div class="card">
+  <h2>Product</h2>
+  {{ form.non_field_errors }}
+  {% with field=form.name %}{% include "jobs/_field.html" %}{% endwith %}
+  <div class="form-grid">
+    {% with field=form.type %}{% include "jobs/_field.html" %}{% endwith %}
+    {% with field=form.supplier %}{% include "jobs/_field.html" %}{% endwith %}
+    {% with field=form.product_number %}{% include "jobs/_field.html" %}{% endwith %}
+    {% with field=form.colour_name %}{% include "jobs/_field.html" %}{% endwith %}
+    {% with field=form.fill %}{% include "jobs/_field.html" %}{% endwith %}
+    {% with field=form.spec_reference %}{% include "jobs/_field.html" %}{% endwith %}
+  </div>
+</div>
+<div class="card">
+  <h2>Size and quantities</h2>
+  <p class="muted">Used for the quantities file. Callidus works out its own cutting waste when a room is laid out; wastage here is the allowance on top.</p>
+  <div class="form-grid">
+    {% with field=form.roll_width_m %}{% include "jobs/_field.html" %}{% endwith %}
+    {% with field=form.tile_width_mm %}{% include "jobs/_field.html" %}{% endwith %}
+    {% with field=form.tile_length_mm %}{% include "jobs/_field.html" %}{% endwith %}
+    {% with field=form.coving_height_mm %}{% include "jobs/_field.html" %}{% endwith %}
+    {% with field=form.wastage_pct %}{% include "jobs/_field.html" %}{% endwith %}
+  </div>
+  {% with field=form.round_up %}{% include "jobs/_field.html" %}{% endwith %}
+</div>
+<div class="card">
+  <details><summary><b>Advanced</b></summary>
+  <p class="muted">When a project's Callidus job does not have this product, the platform adds it to the Callidus file and copies Callidus's own roll settings from a product of the same type in the Callidus template. Choose a specific one only if the automatic choice is wrong.</p>
+  {% with field=form.callidus_settings_from %}{% include "jobs/_field.html" %}{% endwith %}
+  {% with field=form.notes %}{% include "jobs/_field.html" %}{% endwith %}
+  {% with field=form.active %}{% include "jobs/_field.html" %}{% endwith %}
+  </details>
+</div>
+<button class="btn">Save product</button>
+</form>
+{% endblock %}

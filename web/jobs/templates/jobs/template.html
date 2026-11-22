@@ -1,0 +1,27 @@
+{% extends "jobs/base.html" %}
+{% block title %}Callidus template · Crean pre-measure{% endblock %}
+{% block content %}
+<p class="muted"><a href="{% url 'settings' %}">Settings</a></p>
+<h1>Callidus template</h1>
+<p class="sub">Any Crean Callidus job will do. New files are built on it when a project has no Callidus job of its own, and new products copy Callidus's roll settings from its products. The background (.CalBack) must have one sheet; only its header is used.</p>
+<div class="card">
+  <form method="post" enctype="multipart/form-data">{% csrf_token %}
+    {% if template %}<p>Current: {% if template.est %}<b>{{ template.est.name|cut:"templates/" }}</b>{% else %}<span class="pill warn">no .est yet</span>{% endif %} and <b>{{ template.file.name|cut:"templates/" }}</b>. Upload a file to replace it.</p>{% endif %}
+    <div class="form-grid">
+      {% with field=form.est %}{% include "jobs/_field.html" %}{% endwith %}
+      {% with field=form.file %}{% include "jobs/_field.html" %}{% endwith %}
+    </div>
+    {% with field=form.note %}{% include "jobs/_field.html" %}{% endwith %}
+    <button class="btn">Save</button>
+  </form>
+</div>
+{% if products %}
+<div class="card">
+  <h2>Products in the template</h2>
+  <p class="muted">New products copy their settings from one of these of the same type. Tiles cannot be copied yet.</p>
+  <table><tr><th>Product</th><th>Type in Callidus</th><th>New products can copy it</th></tr>
+  {% for p in products %}<tr><td>{{ p.name }}</td><td>{{ p.kind }}</td><td>{% if p.copyable %}Yes{% else %}<span class="muted">No</span>{% endif %}</td></tr>{% endfor %}
+  </table>
+</div>
+{% endif %}
+{% endblock %}

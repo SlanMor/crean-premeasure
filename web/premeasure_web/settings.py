@@ -88,6 +88,15 @@ REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 JOB_QUEUE = "premeasure"
 JOBS_INLINE = os.environ.get("JOBS_INLINE", "0") == "1"
 
+# Email for "your drawings are ready". Leave EMAIL_HOST empty to turn it off.
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "")
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "1") == "1"
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "Crean pre-measure <noreply@markgaffney.com>")
+SITE_URL = os.environ.get("SITE_URL", "https://crean.markgaffney.com")
+
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "home"
 LOGOUT_REDIRECT_URL = "login"

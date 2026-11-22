@@ -1,8 +1,8 @@
 """Project setup and processing jobs.
 
-First cut of the "Project setup" module in the functional spec: a project,
-its levels, its approved products per finish code, and the files uploaded to
-it. Measuring rules and house types / plot schedules follow in later phases.
+Projects, their setup (products per finish code, measuring rules), Crean's
+product list, uploads and the drawings read for them. House types and plot
+schedules follow in later phases.
 """
 
 from django.db import models
@@ -40,50 +40,72 @@ class Level(models.Model):
         return f"{self.project.code} / {self.name}"
 
 
-class Product(models.Model):
-    """A product the tender uses, set up once per project (Project setup).
+def callidus_text(text: str) -> str:
+    """Callidus uses the Windows character set: keep names to what it can show."""
+    import unicodedata
 
-    The name is how it appears in Callidus. If the project's Callidus job (or
-    the house template) already has a product of that name it is used as it
-    is; otherwise the platform adds it, copying the roll and waste settings
-    of ``settings_from``, a product already in that job."""
+    text = unicodedata.normalize("NFKC", text).strip()
+    return text.encode("cp1252", "replace").decode("cp1252").replace("<", "(").replace(">", ")")
 
-    class Kind(models.TextChoices):
-        FLOOR = "floor", "Floor finish"
-        SKIRTING = "skirting", "Skirting or edge"
 
-    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="products")
-    finish_code = models.CharField(
-        max_length=30, blank=True, help_text="Code on the drawings, for example F1-D or FF7."
+class LibraryProduct(models.Model):
+    """A product in Crean's product list, shared by every project.
+
+    The name is how it appears in Callidus. Settings here feed the quantities
+    (wastage, rounding). When a project's Callidus job lacks the product, the
+    platform adds it, copying Callidus's own roll settings from a product of
+    the same type in the house template (or the one named in
+    ``callidus_settings_from``)."""
+
+    class Type(models.TextChoices):
+        SHEET = "sheet", "Sheet (roll)"
+        TILE = "tile", "Tile"
+        CARPET_TILE = "carpet_tile", "Carpet tile"
+        MATWELL = "matwell", "Matwell or matting"
+        SKIRTING = "skirting", "Skirting or coving"
+        EDGE = "edge", "Trim or threshold strip"
+
+    FLOOR_TYPES = ("sheet", "tile", "carpet_tile", "matwell")
+
+    name = models.CharField("name in Callidus", max_length=200, unique=True)
+    type = models.CharField(max_length=20, choices=Type.choices, default=Type.SHEET)
+    supplier = models.CharField(max_length=100, blank=True)
+    product_number = models.CharField(max_length=60, blank=True, help_text="For example 3756 or AQI2005.")
+    colour_name = models.CharField("colour", max_length=100, blank=True)
+    fill = models.CharField("colour in Callidus", max_length=7, blank=True, help_text="#rrggbb")
+    roll_width_m = models.DecimalField("roll width (m)", max_digits=5, decimal_places=2, null=True, blank=True)
+    tile_width_mm = models.PositiveIntegerField("tile width (mm)", null=True, blank=True)
+    tile_length_mm = models.PositiveIntegerField("tile length (mm)", null=True, blank=True)
+    wastage_pct = models.DecimalField(
+        "wastage (%)", max_digits=5, decimal_places=1, null=True, blank=True,
+        help_text="On top of the Callidus layout. Leave blank to use the company default for this type.",
     )
-    kind = models.CharField(max_length=10, choices=Kind.choices, default=Kind.FLOOR)
-    name = models.CharField("product name in Callidus", max_length=200)
-    fill = models.CharField("colour", max_length=7, blank=True, help_text="Colour shown in Callidus, #rrggbb.")
-    settings_from = models.CharField(
-        max_length=200, blank=True,
-        help_text="A product already in the Callidus job whose roll and waste settings a new product copies.",
+    round_up = models.BooleanField("order in whole rolls or boxes", default=False)
+    coving_height_mm = models.PositiveIntegerField("coving height (mm)", null=True, blank=True)
+    spec_reference = models.CharField(max_length=200, blank=True)
+    callidus_settings_from = models.CharField(
+        "Callidus settings copied from", max_length=200, blank=True,
+        help_text="Advanced. Leave blank and the platform picks a product of the same type in the Callidus template.",
     )
-    colour = models.CharField(max_length=100, blank=True)
-    spec_source = models.CharField(max_length=200, blank=True, help_text="Where this came from, and its date.")
+    notes = models.TextField(blank=True)
+    active = models.BooleanField(default=True)
+    created_by = models.ForeignKey("auth.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ["project", "kind", "finish_code", "name"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["project", "finish_code"], condition=~models.Q(finish_code=""), name="one_product_per_code"
-            )
-        ]
+        ordering = ["name"]
+        verbose_name = "product"
 
     def __str__(self) -> str:
-        return f"{self.finish_code}: {self.name}" if self.finish_code else self.name
+        return self.name
 
     def save(self, *args, **kwargs):
-        # Callidus uses the Windows character set: keep names to what it can show
-        import unicodedata
-
-        name = unicodedata.normalize("NFKC", self.name).strip()
-        self.name = name.encode("cp1252", "replace").decode("cp1252").replace("<", "(").replace(">", ")")
+        self.name = callidus_text(self.name)
         super().save(*args, **kwargs)
+
+    @property
+    def is_floor(self) -> bool:
+        return self.type in self.FLOOR_TYPES
 
     @property
     def rgb(self) -> tuple[int, int, int] | None:
@@ -94,6 +116,40 @@ class Product(models.Model):
             return tuple(int(h[i : i + 2], 16) for i in (0, 2, 4))
         except ValueError:
             return None
+
+    @property
+    def size(self) -> str:
+        if self.roll_width_m:
+            return f"{self.roll_width_m:g} m roll"
+        if self.tile_width_mm and self.tile_length_mm:
+            return f"{self.tile_width_mm} x {self.tile_length_mm} mm"
+        if self.coving_height_mm:
+            return f"{self.coving_height_mm} mm high"
+        return ""
+
+
+class Product(models.Model):
+    """Project setup: which product the tender uses for each finish code."""
+
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="products")
+    finish_code = models.CharField(max_length=30, help_text="Code on the drawings, for example F1-D or FF7.")
+    library = models.ForeignKey(
+        LibraryProduct, on_delete=models.PROTECT, null=True, blank=True, related_name="uses", verbose_name="product"
+    )
+    description = models.CharField(max_length=300, blank=True, help_text="What the drawing's legend says.")
+    kind = models.CharField(max_length=10, choices=[("floor", "Floor"), ("skirting", "Skirting")], default="floor")
+    spec_source = models.CharField(max_length=200, blank=True, help_text="Where this came from, and its date.")
+
+    class Meta:
+        ordering = ["project", "finish_code"]
+        constraints = [models.UniqueConstraint(fields=["project", "finish_code"], name="one_product_per_code")]
+
+    def __str__(self) -> str:
+        return f"{self.finish_code}: {self.name or 'not chosen'}"
+
+    @property
+    def name(self) -> str:
+        return self.library.name if self.library else ""
 
 
 class Upload(models.Model):
@@ -174,6 +230,7 @@ class Premeasure(models.Model):
     """One finishes drawing read and written out as a pre-measured Callidus job."""
 
     class Status(models.TextChoices):
+        QUEUED = "queued", "Waiting its turn"
         READING = "reading", "Reading the drawing"
         REVIEW = "review", "Ready for review"
         WRITING = "writing", "Writing Callidus files"
@@ -199,6 +256,7 @@ class Premeasure(models.Model):
     written = models.JSONField(null=True, blank=True)
     error = models.TextField(blank=True)
     created_by = models.ForeignKey("auth.User", on_delete=models.SET_NULL, null=True, blank=True)
+    batch = models.ForeignKey("Batch", on_delete=models.SET_NULL, null=True, blank=True, related_name="premeasures")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -210,4 +268,86 @@ class Premeasure(models.Model):
 
     @property
     def busy(self) -> bool:
-        return self.status in (self.Status.READING, self.Status.WRITING)
+        return self.status in (self.Status.QUEUED, self.Status.READING, self.Status.WRITING)
+
+
+class Batch(models.Model):
+    """Several drawings uploaded together and left to run."""
+
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="batches")
+    created_by = models.ForeignKey("auth.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    auto_write = models.BooleanField(
+        "write Callidus files automatically", default=True,
+        help_text="When every finish on a drawing has a product in the project setup.",
+    )
+    notify = models.BooleanField("email me when they are all done", default=True)
+    notified_at = models.DateTimeField(null=True, blank=True)
+    files_pending = models.PositiveIntegerField(default=0, help_text="PDFs still to be split into pages.")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name_plural = "batches"
+
+
+class MeasuringRules(models.Model):
+    """How Crean measures. One row with no project holds the company defaults;
+    a project may have its own row that replaces them for that project."""
+
+    ROOM_EDGE = [("", "Not decided yet"), ("wall_face", "Wall face"), ("inside_band", "Inside the skirting band")]
+    GLAZING = [("", "Not decided yet"), ("glass_line", "Glass line"), ("inside_frame", "Inside of the frame")]
+    DOORWAYS = [("", "Not decided yet"), ("centre", "Centre of the door"), ("under_door", "Under the door to the far face"),
+                ("frame", "Stop at the frame")]
+    FURNITURE = [("", "Not decided yet"), ("under", "Floor runs under"), ("plinth", "Stop at the plinth")]
+    STAIRS = [("", "Not decided yet"), ("plan", "Plan area"), ("treads", "Landings plus treads and risers")]
+    SPLITS = [("", "Not decided yet"), ("continuous", "One area per continuous floor"),
+              ("by_tag", "Split at each room tag")]
+    COVING = [("", "Not decided yet"), ("note", "Follow the note"), ("plan", "Follow the plan")]
+    SHEETS = [("", "Not decided yet"), ("one", "One Callidus file"), ("separate", "One file per sheet")]
+    YES_NO = [("", "Not decided yet"), ("yes", "Yes"), ("no", "No")]
+
+    project = models.OneToOneField(Project, on_delete=models.CASCADE, null=True, blank=True, related_name="rules")
+    room_edge = models.CharField("room edge", max_length=20, choices=ROOM_EDGE, blank=True)
+    glazing = models.CharField("floor-to-ceiling glazing: measure to", max_length=20, choices=GLAZING, blank=True)
+    skirting_on_glazing = models.CharField("skirting along glazing", max_length=5, choices=YES_NO, blank=True)
+    doorways = models.CharField("doorways: floor runs to", max_length=20, choices=DOORWAYS, blank=True)
+    threshold_strips = models.CharField("threshold strip at every change of finish", max_length=5, choices=YES_NO,
+                                        blank=True)
+    min_opening_m2 = models.DecimalField(
+        "smallest opening deducted (m²)", max_digits=5, decimal_places=2, default=2,
+        help_text="Columns, risers or ducts smaller than this are measured through.",
+    )
+    furniture = models.CharField("fixed furniture and kitchen units", max_length=20, choices=FURNITURE, blank=True)
+    stairs = models.CharField("stairs", max_length=20, choices=STAIRS, blank=True)
+    nosings_separate = models.CharField("nosings priced separately", max_length=5, choices=YES_NO, blank=True)
+    room_splits = models.CharField("room splits", max_length=20, choices=SPLITS, blank=True)
+    coving_notes = models.CharField("coving note on the drawing vs the plan", max_length=20, choices=COVING, blank=True)
+    lift_floors = models.CharField("add a floor for each lift car", max_length=5, choices=YES_NO, blank=True)
+    two_sheets = models.CharField("a floor drawn on two sheets", max_length=20, choices=SHEETS, blank=True)
+    wastage_sheet = models.DecimalField("sheet wastage (%)", max_digits=5, decimal_places=1, default=0)
+    wastage_tile = models.DecimalField("tile wastage (%)", max_digits=5, decimal_places=1, default=0)
+    wastage_carpet_tile = models.DecimalField("carpet tile wastage (%)", max_digits=5, decimal_places=1, default=0)
+    wastage_matwell = models.DecimalField("matting wastage (%)", max_digits=5, decimal_places=1, default=0)
+    wastage_skirting = models.DecimalField("skirting wastage (%)", max_digits=5, decimal_places=1, default=0)
+    wastage_edge = models.DecimalField("trim wastage (%)", max_digits=5, decimal_places=1, default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    # what the software uses today; the rest is recorded and applied as it is built
+    APPLIED = {"min_opening_m2", "wastage_sheet", "wastage_tile", "wastage_carpet_tile",
+               "wastage_matwell", "wastage_skirting", "wastage_edge"}
+
+    class Meta:
+        verbose_name_plural = "measuring rules"
+
+    @classmethod
+    def company(cls) -> "MeasuringRules":
+        obj = cls.objects.filter(project=None).first()
+        return obj or cls.objects.create(project=None)
+
+    @classmethod
+    def for_project(cls, project) -> "MeasuringRules":
+        own = cls.objects.filter(project=project).first()
+        return own or cls.company()
+
+    def wastage_for(self, product_type: str):
+        return getattr(self, f"wastage_{product_type}", 0)
