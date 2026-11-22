@@ -9,10 +9,11 @@ Room block layout (offsets from the end of the room-name string), verified on
 479 of 483 rooms across nine files:
 
 * +0   uint16 material reference, then one byte
-* +3   point record (x, y, 18 bytes, uint32 1000): label position
+* +3   point record (x, y, 18 bytes, uint32 1000): layout origin, repeated
+  as the zone's point
 * +41  float32 layout direction, radians
-* +54  point record: layout start point
-* +114 point record: a further reference point
+* +54  point record: label position (confirmed by test T3)
+* +114 point record: reference point, at or near the first vertex
 * +0xee usually the zone outline (vertex count + vertex records), often
   identical to the room outline
 """
@@ -24,6 +25,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .est_reader import VERTEX_MARKER, VERTEX_RECORD, EstFile, Room, read_est
+from .room_writer import RoomFormatError, RoomRecord, new_room, parse_room, serialise_room
 
 POINT_OFFSETS = (3, 54, 114)
 ZONE_OFFSET = 0xEE
@@ -110,6 +112,44 @@ class EstPatcher:
                 self._shift_point(block.name_end + q, dx, dy)
         for k in range(len(room.vertices)):
             self._shift_point(room.offset + k * VERTEX_RECORD, dx, dy)
+
+    def material_index(self, material_name: str) -> int:
+        targets = [m for m in self._est().materials if m.name == material_name]
+        if len(targets) != 1:
+            raise PatchError(f"expected one material called {material_name!r}, found {len(targets)}")
+        return targets[0].index
+
+    def replace_room(
+        self,
+        name: str,
+        *,
+        new_name: str,
+        material_name: str,
+        vertices: list[tuple[float, float]],
+        edges: list[bytes] | None = None,
+        label: tuple[float, float] | None = None,
+    ) -> RoomRecord:
+        """Replace a no-layout room with a new room built by our writer.
+
+        The old room must have no layout, so the new room takes exactly its
+        two object slots (room and zone) and nothing else in the file moves.
+        """
+        room = self._room(name)
+        start = room.offset - 6
+        try:
+            old, end = parse_room(bytes(self.data), start)
+        except RoomFormatError as exc:
+            raise PatchError(f"room {name!r} cannot be replaced: {exc}") from exc
+        rec = new_room(
+            old,
+            name=new_name,
+            material=self.material_index(material_name),
+            vertices=vertices,
+            edges=edges,
+            label=label,
+        )
+        self.data[start:end] = serialise_room(rec)
+        return rec
 
     def save(self, path: str | Path) -> Path:
         path = Path(path)

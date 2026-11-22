@@ -1,6 +1,6 @@
 # Callidus file format: what we know
 
-Decoded in November 2026 from nine floor files across four Crean jobs. Reading is proven (Crean's spreadsheets reproduce exactly, apart from rows explained by later edits). Writing is not yet proven: see "Open" at the end.
+Decoded in November 2026 from nine floor files across four Crean jobs. Reading is proven (Crean's spreadsheets reproduce exactly, apart from rows explained by later edits). Editing is proven: Callidus opens our edited files and reads renames, finish changes and moved outlines as intended (tests T1 to T4). Writing a whole room from scratch is test T5.
 
 ## .est (estimate)
 
@@ -14,13 +14,24 @@ A Microsoft MFC `CArchive` binary.
   - uint32 vertex count, then one 30-byte record per vertex: float32 x, float32 y (metres), 18 bytes of edge data, uint32 `1000`.
   - Then uint32 `1000`, a length-prefixed XML block `<roomName><name>…</name><CallidusID>…</CallidusID><TPPid/></roomName>`, then a uint16 material reference.
   - A zone object follows (`TileZone`, `OldSheetZone` or `NetZone`) with its own outline, then the calculated layout (tiles, cuts, roll cuts, cutting frames).
+- **Room list:** a uint16 count of top-level rooms, then the Room objects one after another (Cashel: 53). A room can hold sub-rooms (Cashel has three `NetZone` rooms inside "GF Circulation West Design 1"); our reader lists those as rooms too, which is why it finds 56.
+- **MFC object numbers:** each new class and each new object takes the next number. A room with no layout is exactly two objects (the Room and its zone). A room with a layout adds one object per layout piece, and layouts refer back to pieces in other rooms and to a roll list at the end of the file. That is why removing a layout from the middle of a file means renumbering everything after it, and why we replace no-layout rooms instead (see T5).
 - **Room block after the name** (offsets from the end of the name string; holds for 479 of 483 rooms in nine files):
   - +0: uint16 material reference, then one byte.
-  - +3: point record (x, y, 18 bytes, uint32 1000), the label position.
-  - +41: float32 layout direction in radians (seen 3.1416 and 4.7124).
-  - +54: point record, the layout start point.
-  - +114: point record, a further reference point (meaning not confirmed).
-  - +0xee: the zone outline in 139 rooms, identical to the room outline. In the rest the zone sits elsewhere or differs from the room; the patcher refuses to move those.
+  - +3: point record (x, y, 18 bytes, uint32 1000), the layout origin. The zone repeats it.
+  - +33: 8 zero bytes.
+  - +41: float32 layout direction in radians. The zone repeats it.
+  - +45: float32, usually 0 (meaning not known).
+  - +54: point record, the label position (confirmed by T3: moving it moved the label).
+  - +84: uint32 1, uint32 1, then uint32 reference edge index (always less than the vertex count).
+  - +96: uint16 number of sub-rooms, followed by the sub-room objects.
+  - +98 (after any sub-rooms): 16 zero bytes, then at +114 a point record at or near the first vertex.
+  - +144: 92 bytes that are the same in every room except two flag bytes (+222 and +234; meaning not known).
+  - +0xec: the zone object tag; +0xee the zone outline. In 139 rooms the zone outline matches the room; in the rest it differs, usually because the room has been laid out.
+- **A room with no layout** (written by `callidus/room_writer.py`, byte-exact on 17 rooms across the nine files):
+  - Room object, then the zone: outline, a null parent (uint16 0), the origin point, the direction, uint32 1000.
+  - Then uint16 zone object number (the zone refers to itself), uint16 material, three empty lists (`e8030000 00000000`, `e8030000 00000000`, `e8030000`), uint16 0 for no layout pieces, and uint32 1000.
+  - The zone's edge data either copies the room's edges or is all zero; quantities come from the room's edges.
 - **Edge data (18 bytes per edge, from that vertex to the next):**
   - byte 0 = 1: edge is open (no wall).
   - byte 8 = 2: another edge flag, excluded from room-level skirting; meaning not confirmed (possibly doorway).
@@ -49,6 +60,7 @@ Built from the Cashel "Revised measure" file with `scripts/make_callidus_test_se
 | T2-finish | G25 from FF6 to FF9 | changing the material reference is enough |
 | T3-move-all | G25, its zone and layout points moved 1 m | whether Callidus redoes the layout itself |
 | T4-move-outline | G25 outline only moved 1 m | whether the room or the zone outline drives area |
+| T5-new-room | "Half landing 1 main stair" replaced by "T5 TEST ROOM", a 4 m by 3 m FF6 rectangle with coved skirting, written from scratch with no layout | whether Callidus accepts and can lay out a room we write |
 
 Results so far (22 November 2026, from screenshots; the test rooms were not clicked, so these come from comparing the screenshots pixel by pixel):
 
@@ -64,7 +76,7 @@ Results so far (22 November 2026, from screenshots; the test rooms were not clic
 
 Optional: re-do G25's layout from the Layout menu in T3, to confirm a stale layout is replaced cleanly.
 
-Next: decode the no-layout room block from the FF8 rooms, then build T5 (G25 rewritten in that form, layout removed) to prove we can write a room Callidus treats as its own.
+T5 was built instead of removing G25's layout: G25's 12 layout objects are referred to from the roll list at the end of the file, and taking them out would renumber every object after G25. Replacing a no-layout room keeps every object number the same. Expected in Callidus: T5 TEST ROOM net 12.00 m², perimeter 14.00 m, FF6; FF6 net total 196.51 m² (was 184.51); FF8 net total 331.47 m² (was 333.02). Results: awaiting Crean.
 
 ## Open (needed for writing)
 

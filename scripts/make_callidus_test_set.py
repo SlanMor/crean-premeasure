@@ -8,6 +8,8 @@ them in Callidus can tell us exactly what Callidus accepts:
   T2 finish        one room switched to another sheet product
   T3 move all      one room moved 1 m in x, with its zone and layout points
   T4 move outline  the same room's outline only moved 1 m in x
+  T5 new room      a no-layout room replaced by a room our writer builds from
+                   scratch (see build_t5)
 
 Usage:
   python scripts/make_callidus_test_set.py JOB.est OUT_DIR --prefix CASHEL \
@@ -69,6 +71,51 @@ def build(
         est = read_est(f)
         print(f"{f.name}: {len(est.rooms)} rooms, read back OK")
     return files
+
+
+# Coved skirting on every edge, in the form Callidus writes it: material
+# number at byte 12, float32 0.2 at bytes 14 to 17.
+def skirting_edge(material_index: int) -> bytes:
+    edge = bytearray(18)
+    edge[12] = material_index
+    edge[14:18] = bytes.fromhex("cdcc4c3e")
+    return bytes(edge)
+
+
+def build_t5(
+    est_path: Path,
+    out: Path,
+    prefix: str,
+    replace: str,
+    new_name: str,
+    finish: str,
+    skirting: str,
+    rect: tuple[float, float, float, float],
+    calback: Path | None = None,
+) -> Path:
+    """T5: replace a no-layout room with a rectangle built by our writer.
+
+    rect is (x, y, width, height) in metres, sheet coordinates.
+    """
+    calback = calback or Path(str(est_path) + ".CalBack")
+    x, y, w, h = rect
+    vertices = [(x, y), (x + w, y), (x + w, y + h), (x, y + h)]
+    p = EstPatcher(est_path)
+    edge = skirting_edge(p.material_index(skirting))
+    p.replace_room(
+        replace,
+        new_name=new_name,
+        material_name=finish,
+        vertices=vertices,
+        edges=[edge] * 4,
+        label=(x + w / 2, y + h + 1.5),
+    )
+    target = out / f"{prefix}-T5-new-room.est"
+    out.mkdir(parents=True, exist_ok=True)
+    p.save(target)
+    shutil.copyfile(calback, Path(str(target) + ".CalBack"))
+    print(f"{target.name}: {len(read_est(target).rooms)} rooms, read back OK")
+    return target
 
 
 def main() -> None:
