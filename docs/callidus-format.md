@@ -26,7 +26,7 @@ A Microsoft MFC `CArchive` binary.
   - byte 8 = 2: another edge flag, excluded from room-level skirting; meaning not confirmed (possibly doorway).
   - byte 12: material number of an edge product (for example 125mm coved skirting, matwell frame), 0 if none.
   - bytes 14 to 17: float32 0.2 when an edge product is set (meaning not yet known).
-- **Coordinates:** sheet position multiplied by drawing scale, in metres. Y runs negative from the top of the sheet.
+- **Coordinates:** sheet position multiplied by drawing scale, in metres. The bottom edge of the sheet is y = 0 and the top edge is y = minus the sheet height (the CalBack record gives y-top -59.40, y-bottom 0 for Cashel), so y gets more negative further up the sheet. Confirmed by overlaying our room outlines on Callidus screenshots.
 - **Net area:** room area minus any room inside it.
 - **Skirting:** either per edge (byte 12), or room-level (every edge with all 18 bytes zero), depending on how the job was set up.
 
@@ -50,7 +50,17 @@ Built from the Cashel "Revised measure" file with `scripts/make_callidus_test_se
 | T3-move-all | G25, its zone and layout points moved 1 m | whether Callidus redoes the layout itself |
 | T4-move-outline | G25 outline only moved 1 m | whether the room or the zone outline drives area |
 
-Results: awaiting Crean.
+Results so far (22 November 2026, from screenshots; the test rooms were not clicked, so these come from comparing the screenshots pixel by pixel):
+
+- All five files open in Callidus with no errors.
+- Callidus's own figures match our reader: F06 net 57.14 m² and perimeter 31.36 m (ours 57.139, 31.356); FF8 net total 333.02 m² (ours 333.023); Circulation South East Entrance net 14.22 m² and perimeter 15.55 m (ours 14.218, 15.554); FF12 net total 193.56 m² (ours 193.561).
+- T1: G19's label box is wider than in T3 and T4, consistent with the longer name. Not yet read on screen.
+- T3: G25's label and its pointer moved about 1 m right, so the +3 label point is confirmed.
+- T4: G25's label did not move, as intended.
+- Room outlines are only drawn for the selected material, so the moved G25 outline, its layout, and T2's material change are not visible yet.
+- FF8 shows gross 0.00 m² and no waste figure, so Crean already leaves some materials without a layout.
+
+Still needed: click G19 (T1), G25 (T2, T3, T4) and re-do G25's layout from the Layout menu in T3 and T4.
 
 ## Open (needed for writing)
 
