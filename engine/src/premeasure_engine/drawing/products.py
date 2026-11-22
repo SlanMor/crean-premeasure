@@ -34,10 +34,23 @@ class Suggestion:
     why: str
 
 
+def _norm(code: str) -> str:
+    return re.sub(r"[^A-Z0-9]", "", code.upper())
+
+
 def suggest_materials(entries, material_names: list[str]) -> list[Suggestion]:
     out = []
+    siblings: dict[str, list[set[str]]] = {}
+    for e in entries:
+        b = _norm(e.code.split(" (")[0])
+        siblings.setdefault(b, []).append(_tokens(e.description)[1])
     for e in entries:
         codes, words = _tokens(e.description)
+        base = _norm(e.code.split(" (")[0])
+        shared = len(siblings.get(base, [])) > 1
+        if shared:
+            # one code, several colours: only the words that tell the siblings apart count
+            words = words - set.intersection(*siblings[base])
         best = (0.0, None, "")
         for name in material_names:
             mc, mw = _tokens(name)
@@ -46,6 +59,12 @@ def suggest_materials(entries, material_names: list[str]) -> list[Suggestion]:
             loose = {a for a in codes for b in mc if a != b and (a.startswith(b) or b.startswith(a)) and min(len(a), len(b)) >= 4}
             shared_words = words & mw
             score = 3 * len(shared_codes) + 1.5 * len(loose) + len(shared_words)
+            lead = _norm(name.split(" ", 1)[0])
+            if e.custom_code and lead == base and (not shared or shared_words):
+                # the drawing's own finish code starts the material name (F1-E / "F1E - ...")
+                score += 6
+            elif e.custom_code and lead == base and shared:
+                score = 0  # same code, different colour: never pick on the code alone
             if score > best[0]:
                 why = ", ".join(sorted(shared_codes | loose | shared_words))
                 best = (score, name, why)

@@ -100,18 +100,72 @@ def _subpaths(obj, tf) -> list[list[tuple[float, float]]]:
 
 
 def _fill_geom(subpaths, even_odd: bool):
-    geom = None
+    """Filled area of a path. Even-odd: alternate subpaths cut holes. Non-zero
+    winding: a subpath inside another and drawn the opposite way round is a
+    hole (the usual way CAD exports a room with an island)."""
+    polys = []
     for sp in subpaths:
         if len(sp) < 3:
             continue
-        g = make_valid(Polygon(sp))
-        if g.area <= 0:
-            continue
-        if geom is None:
-            geom = g
+        raw = Polygon(sp)
+        ccw = raw.exterior.is_ccw
+        g = make_valid(raw)
+        if g.area > 0:
+            polys.append((g, ccw))
+    if not polys:
+        return None
+    if even_odd:
+        geom = polys[0][0]
+        for g, _ in polys[1:]:
+            geom = geom.symmetric_difference(g)
+        return geom
+    polys.sort(key=lambda p: -p[0].area)
+    placed: list[tuple[object, bool]] = []
+    geom = None
+    for g, ccw in polys:
+        host = next((h for h in placed if h[0].contains(g.representative_point())), None)
+        if host is not None and host[1] != ccw:
+            geom = geom.difference(g)
         else:
-            geom = geom.symmetric_difference(g) if even_odd else geom.union(g)
+            geom = g if geom is None else geom.union(g)
+        placed.append((g, ccw))
     return geom
+
+
+def _clip(obj, tf):
+    """The object's clip region in sheet metres, or None. pdfium gives clip
+    paths in page space already. Revit and similar exports often draw a room
+    as a large rectangle clipped to the room shape."""
+    cp = R.FPDFPageObj_GetClipPath(obj)
+    if not cp:
+        return None
+    n = R.FPDFClipPath_CountPaths(cp)
+    if n <= 0:
+        return None
+    region = None
+    for k in range(n):
+        subs, cur = [], []
+        for i in range(R.FPDFClipPath_CountPathSegments(cp, k)):
+            seg = R.FPDFClipPath_GetPathSegment(cp, k, i)
+            x, y = ctypes.c_float(), ctypes.c_float()
+            R.FPDFPathSegment_GetPoint(seg, ctypes.byref(x), ctypes.byref(y))
+            if R.FPDFPathSegment_GetType(seg) == R.FPDF_SEGMENT_MOVETO:
+                if len(cur) > 2:
+                    subs.append(cur)
+                cur = [tf(x.value, y.value)]
+            else:
+                cur.append(tf(x.value, y.value))
+            if R.FPDFPathSegment_GetClose(seg):
+                if len(cur) > 2:
+                    subs.append(cur)
+                cur = []
+        if len(cur) > 2:
+            subs.append(cur)
+        g = _fill_geom(subs, even_odd=False)
+        if g is None:
+            continue
+        region = g if region is None else region.intersection(g)
+    return region
 
 
 def _text(obj, textpage) -> str:
@@ -138,6 +192,8 @@ def read_drawing(path: str | Path, page: int = 0, scale: float | None = None) ->
     try:
         pg = pdf[page]
         x0, y0, x1, y1 = pg.get_mediabox()
+        rot = pg.get_rotation() % 360
+        uw, uh = x1 - x0, y1 - y0  # unrotated page size, points
         tp = pg.get_textpage()
         # Texts first, in points, so the scale can be read before converting.
         raw_texts = []
@@ -154,9 +210,18 @@ def read_drawing(path: str | Path, page: int = 0, scale: float | None = None) ->
         k = M_PER_INCH / PT_PER_INCH * scale
 
         def tf(px: float, py: float) -> tuple[float, float]:
-            return ((px - x0) * k, -(py - y0) * k)
+            # page as displayed: /Rotate turns it clockwise
+            ux, uy = px - x0, py - y0
+            if rot == 90:
+                ux, uy = uy, uw - ux
+            elif rot == 180:
+                ux, uy = uw - ux, uh - uy
+            elif rot == 270:
+                ux, uy = uh - uy, ux
+            return (ux * k, -uy * k)
 
-        dwg = Drawing(path, page, (x1 - x0) * k, (y1 - y0) * k, scale)
+        dw, dh = (uh, uw) if rot in (90, 270) else (uw, uh)
+        dwg = Drawing(path, page, dw * k, dh * k, scale)
         for t, (l, b, r, top) in raw_texts:
             (ax, ay), (bx, by) = tf(l, b), tf(r, top)
             dwg.texts.append(TextItem(t, (min(ax, bx), min(ay, by), max(ax, bx), max(ay, by))))
@@ -171,6 +236,10 @@ def read_drawing(path: str | Path, page: int = 0, scale: float | None = None) ->
             if fm.value:
                 g = _fill_geom(subs, even_odd=fm.value == R.FPDF_FILLMODE_ALTERNATE)
                 if g is not None and not g.is_empty:
+                    clip = _clip(obj.raw, tf)
+                    if clip is not None and not clip.contains(g):
+                        g = g.intersection(clip)
+                if g is not None and not g.is_empty and g.area > 0:
                     dwg.fills.append(FillShape(order, _colour(R.FPDFPageObj_GetFillColor, obj.raw), g))
             if st.value:
                 w = ctypes.c_float()

@@ -37,12 +37,14 @@ from .pdf_reader import Colour, Drawing
 WHITE: Colour = (255, 255, 255)
 CELL = 1.0  # metres, for the visibility pass
 CLOSE = 0.02  # joins pieces of one fill split by hairline gaps (metres)
-STRIP_TEST = 0.05  # a fill that mostly vanishes when shrunk by this is a strip
+STRIP_TEST = 0.03  # a fill that mostly vanishes when shrunk by this is a strip
 MIN_ROOM = 0.2  # m2
 MAX_FURNITURE_HOLE = 2.0  # m2: holes smaller than this (furniture, symbols) are floor
 SEAL = 1.0  # metres: closes doors and entrances when finding the building outline
 BLACK: Colour = (0, 0, 0)
-CODE = re.compile(r"^[A-Z]{1,2}\d{2,3}[A-Z]?$")
+STAIRS = re.compile(r"\bstair", re.I)
+CODE = re.compile(r"^(?=.{3,14}$)(?=.*\d)(?=.*[A-Z])[A-Z0-9]+(?:[-.][A-Z0-9]+){0,3}$")
+AREA_TEXT = re.compile(r"\d\s*m(²|2)\b|^\d+(\.\d+)?$", re.I)
 
 
 @dataclass
@@ -131,9 +133,11 @@ def visible_fills(dwg: Drawing, area) -> dict[Colour, object]:
 class _Hatch:
     """Stroke midpoints by colour, for counting hatch inside an area."""
 
-    def __init__(self, dwg: Drawing):
+    def __init__(self, dwg: Drawing, colours: set | None = None):
         pts, cols, ang = [], [], []
         for s in dwg.strokes:
+            if colours is not None and s.colour not in colours:
+                continue
             for line in s.lines:
                 for (ax, ay), (bx, by) in zip(line, line[1:]):
                     pts.append(((ax + bx) / 2, (ay + by) / 2))
@@ -160,7 +164,7 @@ class _Hatch:
 
 
 def _is_strip(g) -> bool:
-    return g.area > 0 and g.buffer(-STRIP_TEST).area < 0.5 * g.area
+    return g.area > 0 and g.buffer(-STRIP_TEST).area < 0.3 * g.area
 
 
 def _classify_colour(col: Colour, g, legend: Legend, hatch: _Hatch) -> tuple[LegendEntry | None, str]:
@@ -168,6 +172,11 @@ def _classify_colour(col: Colour, g, legend: Legend, hatch: _Hatch) -> tuple[Leg
     exact = [e for e in floors if e.fill == col]
     if len(exact) == 1:
         return exact[0], "legend fill"
+    if len(exact) > 1:
+        return None, f"fill {col} is used by more than one legend finish: " + ", ".join(e.code for e in exact)
+    close = [e for e in floors if e.fill and e.fill != WHITE and sum((a - b) ** 2 for a, b in zip(e.fill, col)) <= 36]
+    if len(close) == 1:
+        return close[0], "legend fill"
     found = hatch.colours_in(g.buffer(-0.1))
     for c, n in found.most_common():
         if c == (0, 0, 0):
@@ -177,6 +186,8 @@ def _classify_colour(col: Colour, g, legend: Legend, hatch: _Hatch) -> tuple[Leg
             continue
         if len(match) == 1:
             return match[0], "legend hatch"
+        if len(match) > 2:
+            continue  # a hatch most finishes share says nothing about which one this is
         filled = [e for e in match if e.fill]
         if filled:
             best = min(filled, key=lambda e: sum((a - b) ** 2 for a, b in zip(e.fill, col)))
@@ -185,13 +196,41 @@ def _classify_colour(col: Colour, g, legend: Legend, hatch: _Hatch) -> tuple[Leg
     return None, "colour not in legend"
 
 
+def _code_shape(code: str) -> str:
+    return re.sub(r"[A-Z]", "A", re.sub(r"\d", "9", code.upper()))
+
+
+def _tagged_finish(dwg: Drawing, legend: Legend, col: Colour, g) -> LegendEntry | None:
+    """A colour missing from the legend whose areas all carry the same finish
+    tag, written like the legend's own codes (F1-H beside F1-A..F1-G). The
+    architect added a finish and forgot the legend. Never used for walls or
+    furniture, which carry no finish tag."""
+    codes = [e.custom_code.upper() for e in legend.floors() if e.custom_code]
+    # short shapes like "F5" also fit door and grid tags, so only longer codes count
+    shapes = {_code_shape(c) for c in codes if len(c) >= 3}
+    leads = {re.match(r"[A-Z]*", c).group() for c in codes} - {""}
+    if not shapes:
+        return None
+    found = set()
+    for t in dwg.texts:
+        txt = t.text.strip().upper()
+        if txt in codes or _code_shape(txt) not in shapes or re.match(r"[A-Z]*", txt).group() not in leads:
+            continue
+        if g.contains(Point(t.centre)):
+            found.add(txt)
+    if len(found) != 1:
+        return None
+    code = found.pop()
+    return LegendEntry("floor", 0, "", f"{code} (written on the drawing, not in the legend)", col, custom_code=code)
+
+
 def find_rooms(dwg: Drawing, legend: Legend, exclude: list[tuple] | None = None) -> tuple[list[Room], dict]:
     """Find finish rooms on the sheet. Returns rooms and a summary of what was set aside."""
     area = box(0, -dwg.height_m, dwg.width_m, 0)
     for x in ([legend.area] if legend.area else []) + list(exclude or []):
         area = area.difference(box(*x))
     vis = visible_fills(dwg, area)
-    hatch = _Hatch(dwg)
+    hatch = _Hatch(dwg, {c for e in legend.floors() for c in e.hatch[:1]} - {BLACK})
     report: dict = {"unknown_fills": {}, "orphan_strips_m2": 0.0}
 
     # 1. classify fill colours
@@ -234,13 +273,20 @@ def find_rooms(dwg: Drawing, legend: Legend, exclude: list[tuple] | None = None)
     rooms: list[Room] = list(hatch_rooms)
     for col, (entry, why) in finishes.items():
         g = vis[col].buffer(CLOSE, join_style=2).buffer(-CLOSE, join_style=2)
+        if entry is None:
+            entry = _tagged_finish(dwg, legend, col, g) if why == "colour not in legend" else None
+            if entry is None:
+                # not a legend finish: walls, furniture, other buildings. Reported, not measured.
+                report["unknown_fills"][col] = round(g.area, 2)
+                continue
+            why = "tagged"
+            report.setdefault("tagged_not_in_legend", {})[entry.code] = round(g.area, 2)
         for p in _parts(g):
             if p.area < MIN_ROOM:
                 continue
             r = Room(p, entry, "fill", col)
-            if entry is None:
-                r.flag(f"finish not identified: {why} (fill {col})")
-                report["unknown_fills"][col] = report["unknown_fills"].get(col, 0) + p.area
+            if why == "tagged":
+                r.flag(f"finish {entry.code} is written in the room but is not in the legend; check the product")
             elif why != "legend fill":
                 r.flag(f"finish matched by its hatch ({why}); the fill colour {col} differs from the legend")
             rooms.append(r)
@@ -285,33 +331,44 @@ def find_rooms(dwg: Drawing, legend: Legend, exclude: list[tuple] | None = None)
     _skirting(rooms, vis, legend, report)
 
     # 7. room tags
-    _attach_tags(dwg, rooms)
+    _attach_tags(dwg, rooms, legend)
     for r in rooms:
         if not r.codes:
             r.flag("no room tag inside")
+        if any(STAIRS.search(n) for n in r.names):
+            # plan area of a stair is not what is laid: flights go as treads and risers
+            r.flag("stairs: plan area includes the flights; measure treads, risers and landings separately")
     return rooms, report
 
 
-def _attach_tags(dwg: Drawing, rooms: list[Room]) -> None:
-    codes = [t for t in dwg.texts if CODE.match(t.text)]
+def _attach_tags(dwg: Drawing, rooms: list[Room], legend: Legend | None = None) -> None:
+    """Room numbers (G01, PS-01-27, 02-PLNT-003) and the name printed next to them."""
+    finish_codes = {e.code.split(" (")[0].upper() for e in (legend.entries if legend else [])}
+    finish_codes |= {r.finish.code.split(" (")[0].upper() for r in rooms if r.finish}
+    finish_codes |= {c.replace("-", "") for c in finish_codes}
+    pattern = re.compile("|".join(re.escape(c) for c in sorted(finish_codes, key=len, reverse=True) if c))
+
+    def only_finish_codes(text: str) -> bool:
+        # "F2-C", or "F2-CF2-C" when two tags overlap
+        return bool(finish_codes) and not re.sub(r"[\s,/]", "", pattern.sub("", text.upper()))
+
+    codes = [t for t in dwg.texts if CODE.match(t.text) and not only_finish_codes(t.text)]
     tree = STRtree([r.geom for r in rooms])
     for c in codes:
         cx, cy = c.centre
         h = c.box[3] - c.box[1]
-        name = ""
-        under = [
+        near = [
             t for t in dwg.texts
-            if t is not c and c.box[3] - 0.2 * h < t.box[1] < c.box[3] + 1.5 * h
-            and t.box[0] < cx < t.box[2] + h
-            and not CODE.match(t.text)
+            if t is not c and abs(t.centre[1] - cy) < 3.5 * h and t.box[0] < c.box[2] + h and t.box[2] > c.box[0] - h
+            and not CODE.match(t.text) and not AREA_TEXT.search(t.text)
+            and not only_finish_codes(t.text) and abs(t.box[3] - t.box[1] - h) < 0.35 * h
         ]
-        if under:
-            name = min(under, key=lambda t: abs(t.centre[0] - cx)).text
+        near.sort(key=lambda t: t.box[1])
+        name = " ".join(t.text for t in near)
         hits = [i for i in tree.query(Point(cx, cy)) if rooms[i].geom.contains(Point(cx, cy))]
         if not hits:
-            # the tag can sit on a symbol or hatch line just off the floor; take the nearest room
-            near = tree.query(Point(cx, cy).buffer(0.3))
-            hits = sorted(near, key=lambda i: rooms[i].geom.distance(Point(cx, cy)))[:1]
+            near_rooms = tree.query(Point(cx, cy).buffer(0.3))
+            hits = sorted(near_rooms, key=lambda i: rooms[i].geom.distance(Point(cx, cy)))[:1]
         for i in hits:
             rooms[i].codes.append(c.text)
             rooms[i].names.append(name)
