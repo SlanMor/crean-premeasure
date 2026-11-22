@@ -159,7 +159,7 @@ def build_t6(
         head = parse_room_head(data, start)
         rooms.append(
             RoomRecord(
-                room_class=0, zone_class=0, zone_index=0,
+                room_class=0, zone_class=0, room_index=0,
                 material=head.material, name=head.name, callidus_id=head.callidus_id,
                 vertices=head.vertices, edges=head.edges, zone_edges=head.edges,
                 origin=head.origin, angle=head.angle, angle2=head.angle2,

@@ -97,10 +97,11 @@ def build_job(template: Template, rooms: list[RoomRecord]) -> bytes:
     for i, rec in enumerate(rooms):
         first = i == 0
         room_index = next_index
-        zone_index = room_index + (2 if first else 1)  # the first zone follows its class declaration
-        next_index = zone_index + 1
-        rec.room_class, rec.zone_class, rec.zone_index = r_cls, z_cls, zone_index
-        if zone_index >= 0x7FFF:
+        # Each room is followed by its zone; the first zone comes after its
+        # class declaration. The zone refers back to its room by number.
+        next_index = room_index + (3 if first else 2)
+        rec.room_class, rec.zone_class, rec.room_index = r_cls, z_cls, room_index
+        if next_index >= 0x7FFF:
             raise JobFormatError("object numbers beyond 32766 need long references; not supported yet")
         parts.append(serialise_room(rec, declare_classes=first))
     parts.append(template.tail_fixed)

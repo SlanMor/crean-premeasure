@@ -52,7 +52,7 @@ class RoomFormatError(ValueError):
 class RoomRecord:
     room_class: int  # MFC class index of Room
     zone_class: int  # MFC class index of OldSheetZone
-    zone_index: int  # MFC object index of this room's zone
+    room_index: int  # MFC object index of this room; the zone refers back to it
     material: int  # MFC object index of the room's material
     name: str
     callidus_id: str
@@ -266,7 +266,7 @@ def parse_room(data: bytes, pos: int) -> tuple[RoomRecord, int]:
     if r.f32() != angle:
         raise RoomFormatError("zone angle differs from room angle")
     r.marker()
-    zone_index = r.u16()
+    room_index = r.u16()
     if r.u16() != material:
         raise RoomFormatError("zone material differs from room material")
     r.expect(_EMPTY_LISTS, "zone lists")
@@ -276,7 +276,7 @@ def parse_room(data: bytes, pos: int) -> tuple[RoomRecord, int]:
     rec = RoomRecord(
         room_class=tag & 0x7FFF,
         zone_class=ztag & 0x7FFF,
-        zone_index=zone_index,
+        room_index=room_index,
         material=material,
         name=name,
         callidus_id=cid,
@@ -357,7 +357,7 @@ def serialise_room(rec: RoomRecord, *, declare_classes: bool = False) -> bytes:
             _point(rec.origin),
             struct.pack("<f", rec.angle),
             _M1000,
-            struct.pack("<HH", rec.zone_index, rec.material),
+            struct.pack("<HH", rec.room_index, rec.material),
             _EMPTY_LISTS,
             b"\x00\x00",
             _M1000,
@@ -377,7 +377,7 @@ def new_room(
 ) -> RoomRecord:
     """Build a room that takes the object slots of `template`.
 
-    The new room keeps the template's class indices and zone index, so it can
+    The new room keeps the template's class indices and object number, so it can
     replace the template in place. Layout origin is the first vertex and the
     layout runs along the first edge, as Callidus does for a room drawn from
     that vertex.
@@ -394,7 +394,7 @@ def new_room(
     return RoomRecord(
         room_class=template.room_class,
         zone_class=template.zone_class,
-        zone_index=template.zone_index,
+        room_index=template.room_index,
         material=material,
         name=name,
         callidus_id=callidus_id or str(uuid.uuid4()),

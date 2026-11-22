@@ -31,7 +31,7 @@ A Microsoft MFC `CArchive` binary.
   - +0xec: the zone object tag; +0xee the zone outline. In 139 rooms the zone outline matches the room; in the rest it differs, usually because the room has been laid out.
 - **A room with no layout** (written by `callidus/room_writer.py`, byte-exact on 17 rooms across the nine files):
   - Room object, then the zone: outline, a null parent (uint16 0), the origin point, the direction, uint32 1000.
-  - Then uint16 zone object number (the zone refers to itself), uint16 material, three empty lists (`e8030000 00000000`, `e8030000 00000000`, `e8030000`), uint16 0 for no layout pieces, and uint32 1000.
+  - Then uint16 object number of the room that owns the zone (a reference back to the room, not to the zone; T6 failed with "contained an unexpected object" when this pointed at the zone), uint16 material, three empty lists (`e8030000 00000000`, `e8030000 00000000`, `e8030000`), uint16 0 for no layout pieces, and uint32 1000.
   - The zone's edge data either copies the room's edges or is all zero; quantities come from the room's edges.
 - **Edge data (18 bytes per edge, from that vertex to the next):**
   - byte 0 = 1: edge is open (no wall).

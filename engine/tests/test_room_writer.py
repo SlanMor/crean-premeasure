@@ -25,7 +25,7 @@ SKIRT = bytes(12) + b"\x11\x00" + bytes.fromhex("cdcc4c3e")
 def _template() -> RoomRecord:
     v = [(0.0, 0.0), (2.0, 0.0), (2.0, 1.0), (0.0, 1.0)]
     return RoomRecord(
-        room_class=0x23, zone_class=0x25, zone_index=0x1FB, material=0x17,
+        room_class=0x23, zone_class=0x25, room_index=0x1FB, material=0x17,
         name="Template", callidus_id="00000000-0000-0000-0000-000000000000",
         vertices=v, edges=[bytes(18)] * 4, origin=v[0], angle=0.0,
         label=(1.0, 2.0), ref_point=v[0], zone_edges=[bytes(18)] * 4,
@@ -42,7 +42,7 @@ def test_synthetic_round_trip():
     back, end = parse_room(raw, 0)
     assert end == len(raw)
     assert back == rec
-    assert back.zone_index == 0x1FB and back.material == 0x13
+    assert back.room_index == 0x1FB and back.material == 0x13
 
 
 def test_refuses_unsafe_names():

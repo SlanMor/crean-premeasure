@@ -79,11 +79,13 @@ def test_whole_job_structure_and_totals(cashel, tmp_path):
     body = job[pos + 2 :]
     body = body.replace(ROOM_CLASS_DECL, struct.pack("<H", 0x8023), 1)
     body = body.replace(b"\xff\xff\x01\x00\x0c\x00OldSheetZone", struct.pack("<H", 0x8025), 1)
-    p, zones = 0, []
+    p, owners = 0, []
     for _ in range(n):
         rec, p = parse_room(body, p)
-        zones.append(rec.zone_index)
-    assert zones == [0x26 + 2 * i for i in range(n)]
+        owners.append(rec.room_index)
+    # each zone refers back to its room: 0x24 for the first (after the two
+    # class declarations), then every second number
+    assert owners == [0x24] + [0x25 + 2 * i for i in range(1, n)]
     assert body[p : p + len(TAIL_ANCHOR)] == TAIL_ANCHOR
     # every finish total matches the original, except FF8, which gains the
     # three cut-outs that were sub-rooms of one FF8 room
