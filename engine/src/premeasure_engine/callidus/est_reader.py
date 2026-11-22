@@ -179,9 +179,11 @@ def _read_vertices(data: bytes, string_len_pos: int) -> tuple[int, list[tuple[fl
     return start, vertices, raws
 
 
-def read_est(path: str | Path) -> EstFile:
+def read_est(path: str | Path, data: bytes | None = None) -> EstFile:
+    """Read an .est file. Pass ``data`` to read bytes already in memory."""
     path = Path(path)
-    data = path.read_bytes()
+    if data is None:
+        data = path.read_bytes()
     est = EstFile(path=path, title=_read_title(data), materials=_read_materials(data))
     by_index = {m.index: m for m in est.materials}
     for m in _ROOM_RE.finditer(data):
