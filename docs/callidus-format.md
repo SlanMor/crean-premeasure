@@ -54,13 +54,14 @@ Results so far (22 November 2026, from screenshots; the test rooms were not clic
 
 - All five files open in Callidus with no errors.
 - Callidus's own figures match our reader: F06 net 57.14 m² and perimeter 31.36 m (ours 57.139, 31.356); FF8 net total 333.02 m² (ours 333.023); Circulation South East Entrance net 14.22 m² and perimeter 15.55 m (ours 14.218, 15.554); FF12 net total 193.56 m² (ours 193.561).
-- T1: G19's label box is wider than in T3 and T4, consistent with the longer name. Not yet read on screen.
+- T1: confirmed. G19's label reads "G19 - TEST RENAME" on screen. G25 in T1 (unchanged) shows net 3.33 m², perimeter 9.00 m, FF6, and FF6 net total 184.51 m² (ours 3.333, 8.999, 184.510).
+- T2: confirmed. G25 shows FF9 Marmoleum Fresco Silver Shadow 3860, and the FF9 net total is 120.09 m² (ours 120.093, which is 116.760 plus G25's 3.333). Rewriting the uint16 material reference is enough to move a room to another finish. Whether G25 kept its layout after the change is not yet checked.
 - T3: G25's label and its pointer moved about 1 m right, so the +3 label point is confirmed.
 - T4: G25's label did not move, as intended.
-- Room outlines are only drawn for the selected material, so the moved G25 outline, its layout, and T2's material change are not visible yet.
+- Room outlines are only drawn for the selected material, so the moved G25 outline and its layout in T3 and T4 are not visible yet.
 - FF8 shows gross 0.00 m² and no waste figure, so Crean already leaves some materials without a layout.
 
-Still needed: click G19 (T1), G25 (T2, T3, T4) and re-do G25's layout from the Layout menu in T3 and T4.
+Still needed: click G25 in T3 and T4 and re-do its layout from the Layout menu; check whether G25 still shows a layout pattern in T2.
 
 ## Open (needed for writing)
 
