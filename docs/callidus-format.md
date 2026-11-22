@@ -76,7 +76,11 @@ Results so far (22 November 2026, from screenshots; the test rooms were not clic
 
 Optional: re-do G25's layout from the Layout menu in T3, to confirm a stale layout is replaced cleanly.
 
-T5 was built instead of removing G25's layout: G25's 12 layout objects are referred to from the roll list at the end of the file, and taking them out would renumber every object after G25. Replacing a no-layout room keeps every object number the same. Expected in Callidus: T5 TEST ROOM net 12.00 m², perimeter 14.00 m, FF6; FF6 net total 196.51 m² (was 184.51); FF8 net total 331.47 m² (was 333.02). Results: awaiting Crean.
+T5 was built instead of removing G25's layout: G25's 12 layout objects are referred to from the roll list at the end of the file, and taking them out would renumber every object after G25. Replacing a no-layout room keeps every object number the same. Expected in Callidus: T5 TEST ROOM net 12.00 m², perimeter 14.00 m, FF6; FF6 net total 196.51 m² (was 184.51); FF8 net total 331.47 m² (was 333.02).
+
+T5 result (22 November 2026): passed. The file opens with no errors. T5 TEST ROOM shows net 12.00 m², perimeter 14.00 m, FF6, drawn with its skirting edges in blue like Callidus's own skirted rooms, and the FF6 net total is 196.51 m². Saving in Callidus, closing and reopening keeps the room. FF6 gross stayed at 208.57 m², so the room had not been laid out in that screenshot; laying it out from the Layout menu is still to be confirmed.
+
+Practical note: Callidus would not open any file from the estimator's Z: drive (a folder whose name it shows as "Callidus?"), giving "Cannot open file". The same file opened from a local folder. Delivered files need to be saved to a local folder with a plain name before opening.
 
 ## Open (needed for writing)
 
