@@ -177,3 +177,37 @@ def test_colour_missing_from_legend_uses_the_finish_written_in_the_room():
     texts.append(TextItem("F1-J", (3, 3, 3.4, 3.2)))
     dwg = Drawing("x.pdf", 0, 10, 10, 100, [], [], texts)
     assert _tagged_finish(dwg, legend, (63, 107, 122), room) is None
+
+
+def test_finish_code_does_not_beat_a_different_product_number():
+    # The contractor's own numbering can differ from the architect's: here the
+    # drawing's F2-A is Neptune 3756, but the contractor's "F2A" is Sirius 3754.
+    entries = [LegendEntry("floor", 0, "", "MARMOLEUM CONCRETE NEPTUNE 3756", (1, 2, 3), custom_code="F2-A")]
+    names = ["F2A - Marmoleum Concrete Sirius 3754", "F7 - Marmoleum Concrete Neptune 3756"]
+    (s,) = suggest_materials(entries, names)
+    assert s.material == names[1]
+
+
+def test_room_names_stay_short_when_rooms_merge():
+    from premeasure_engine.drawing.to_callidus import MAX_NAME, room_name
+
+    r = Room(box(0, 0, 4, 4), _floor("F1-A", (1, 2, 3)), "fill", (1, 2, 3))
+    r.codes = [f"00-SUP-0{i:02d}" for i in range(12)]
+    r.names = ["CLEAN UTILITY"] + ["STORE"] * 11
+    name = room_name(r, 1)
+    assert name == "00-SUP-000 and 11 more - Clean Utility" and len(name) <= MAX_NAME
+
+
+def test_same_code_light_finish_never_takes_the_dark_product():
+    # Limerick GF: the PDF splits "GREY" as "G rey" in one entry only
+    def e(code, desc):
+        return LegendEntry("floor", 0, "", desc, (1, 2, 3), custom_code=code)
+
+    entries = [
+        e("M50-156", "M50-156 VINYL - ANTI STATIC R9 SLIP RESISTANCE - Forbo Sphera SD - Dark Neutral G rey"),
+        e("M50-156 (2)", "M50-156 VINYL - ANTI STATIC R9 SLIP RESISTANCE - Forbo Sphera SD - Light Neutral Grey"),
+    ]
+    names = ["M50-156 VINYL - ANTI STATIC FORBO SPHERA SD DARK NEUTRAL GREY"]
+    s = {x.legend_code: x for x in suggest_materials(entries, names)}
+    assert s["M50-156"].material == names[0]
+    assert s["M50-156 (2)"].material is None

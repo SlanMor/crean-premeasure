@@ -39,6 +39,8 @@ git pull
 docker compose up -d --build
 ```
 
+Migrations run when the web container starts. After the update that adds the drawing pages, do the one-off set-up in `docs/platform.md`: a user for each estimator, and one background template in the admin.
+
 ## Backups
 
 Hetzner takes daily server backups. A nightly database dump to object storage is still to be added.

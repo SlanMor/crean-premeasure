@@ -1,6 +1,6 @@
 from django.contrib import admin, messages
 
-from .models import Job, Level, Product, Project, Upload
+from .models import BackgroundTemplate, Job, Level, Premeasure, Product, Project, Upload
 from .queue import get_queue
 
 
@@ -43,3 +43,27 @@ class JobAdmin(admin.ModelAdmin):
     list_display = ("task", "upload", "status", "created_at", "finished_at")
     list_filter = ("status", "task")
     readonly_fields = ("upload", "task", "status", "result", "error", "created_at", "finished_at")
+
+
+@admin.register(BackgroundTemplate)
+class BackgroundTemplateAdmin(admin.ModelAdmin):
+    list_display = ("__str__", "uploaded_at")
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        from premeasure_engine.premeasure import calback_sheets
+
+        try:
+            n = calback_sheets(obj.file.path)
+        except Exception as exc:
+            self.message_user(request, f"This file could not be read as a .CalBack ({exc}).", messages.ERROR)
+            return
+        if n != 1:
+            self.message_user(request, f"This .CalBack has {n} sheets; a template needs exactly one.", messages.WARNING)
+
+
+@admin.register(Premeasure)
+class PremeasureAdmin(admin.ModelAdmin):
+    list_display = ("title", "project", "status", "created_by", "created_at")
+    list_filter = ("status", "project")
+    readonly_fields = ("summary", "written", "error", "created_at", "updated_at")

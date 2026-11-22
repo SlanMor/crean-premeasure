@@ -187,9 +187,14 @@ def read_est(path: str | Path, data: bytes | None = None) -> EstFile:
     est = EstFile(path=path, title=_read_title(data), materials=_read_materials(data))
     by_index = {m.index: m for m in est.materials}
     for m in _ROOM_RE.finditer(data):
-        string_len_pos = m.start() - 1
+        # MFC string length: one byte, or 0xFF then a WORD for 255 bytes and over
+        if m.start() >= 3 and data[m.start() - 3] == 0xFF and struct.unpack_from("<H", data, m.start() - 2)[0] >= 0xFF:
+            string_len_pos = m.start() - 3
+            string_end = m.start() + struct.unpack_from("<H", data, m.start() - 2)[0]
+        else:
+            string_len_pos = m.start() - 1
+            string_end = m.start() + data[string_len_pos]
         offset, vertices, raws = _read_vertices(data, string_len_pos)
-        string_end = string_len_pos + 1 + data[string_len_pos]
         material_index = struct.unpack_from("<H", data, string_end)[0]
         edges = [
             Edge(start=vertices[i], end=vertices[(i + 1) % len(vertices)], raw=raws[i])

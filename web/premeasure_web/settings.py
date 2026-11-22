@@ -86,6 +86,14 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 JOB_QUEUE = "premeasure"
+JOBS_INLINE = os.environ.get("JOBS_INLINE", "0") == "1"
+
+LOGIN_URL = "login"
+LOGIN_REDIRECT_URL = "home"
+LOGOUT_REDIRECT_URL = "login"
+# Drawings are large; files over this go to a temporary file rather than memory.
+FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
+DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
 
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")

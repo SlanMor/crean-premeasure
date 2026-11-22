@@ -1,0 +1,37 @@
+{% extends "jobs/base.html" %}
+{% block content %}
+<h1>Projects</h1>
+<p class="sub">Pick a project, add its finishes drawings, and download pre-measured Callidus files.</p>
+<div class="card">
+  {% if projects %}
+  <table>
+    <tr><th>Code</th><th>Name</th><th>Client</th><th class="num">Drawings</th></tr>
+    {% for p in projects %}
+    <tr><td><a href="{% url 'project' p.pk %}">{{ p.code }}</a></td><td>{{ p.name }}</td><td>{{ p.client }}</td>
+        <td class="num">{{ p.premeasures.count }}</td></tr>
+    {% endfor %}
+  </table>
+  {% else %}<p class="muted">No projects yet. Add the first one below.</p>{% endif %}
+</div>
+{% if recent %}
+<div class="card">
+  <h2>Recent drawings</h2>
+  <table>
+    {% for pm in recent %}
+    <tr><td><a href="{% url 'premeasure' pm.pk %}">{{ pm.title }}</a></td><td>{{ pm.project.code }}</td>
+        <td>{% include "jobs/_status.html" %}</td><td class="muted">{{ pm.created_at|date:"j M Y H:i" }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+<div class="card">
+  <h2>New project</h2>
+  <form method="post">{% csrf_token %}
+    <div class="grid">
+      {% for field in form %}{% if field.name != "notes" %}{% include "jobs/_field.html" %}{% endif %}{% endfor %}
+    </div>
+    {% with field=form.notes %}{% include "jobs/_field.html" %}{% endwith %}
+    <button class="btn">Add project</button>
+  </form>
+</div>
+{% endblock %}

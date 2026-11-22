@@ -15,7 +15,7 @@ import uuid
 from dataclasses import dataclass
 
 from ..callidus.room_writer import ZERO18, RoomRecord
-from .rooms import Room
+from .rooms import Room, _tidy
 
 # Edge product data as Callidus writes it: material number at byte 12,
 # float32 0.2 at bytes 14 to 17 (seen on every skirted edge in the samples).
@@ -38,10 +38,20 @@ class Written:
     name: str
 
 
+MAX_NAME = 100  # long enough for a tag and a name; several merged rooms are shortened
+
+
 def room_name(room: Room, n: int) -> str:
     base = room.label or f"Untagged {room.finish.code if room.finish else 'area'} {n}"
+    if len(base) > MAX_NAME - 8 and len(room.codes) > 1:
+        base = f"{room.codes[0]} and {len(room.codes) - 1} more - {_first_name(room)}"
     name = f"CHECK - {base}" if room.status != "Verified" else base
-    return name.replace("<", "(").replace(">", ")").replace("&", "and")[:200]
+    name = name.replace("<", "(").replace(">", ")").replace("&", "and")
+    return name if len(name) <= MAX_NAME else name[: MAX_NAME - 3].rstrip() + "..."
+
+
+def _first_name(room: Room) -> str:
+    return _tidy(next((n for n in room.names if n), "").strip())[:40]
 
 
 def to_records(
