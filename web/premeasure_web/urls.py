@@ -22,6 +22,7 @@ urlpatterns = [
     path("premeasure/<int:pk>/write/", views.write, name="write"),
     path("premeasure/<int:pk>/reread/", views.reread, name="reread"),
     path("premeasure/<int:pk>/retry/", views.retry, name="retry"),
+    path("premeasure/<int:pk>/scale/", views.set_scale, name="set_scale"),
     path("premeasure/<int:pk>/status/", views.status, name="status"),
     path("premeasure/<int:pk>/preview.png", views.preview, name="preview"),
     path("premeasure/<int:pk>/drawing.pdf", views.drawing, name="drawing"),

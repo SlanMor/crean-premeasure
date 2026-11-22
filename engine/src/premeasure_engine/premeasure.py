@@ -106,11 +106,12 @@ def calback_sheets(path: str | Path) -> int:
 def analyse(
     pdf: str | Path, products: str | Path | list[str], page: int = 0, exclude: list[tuple] | None = None,
     min_opening: float | None = None,
+    scale: float | None = None,
 ) -> Analysis:
     """``products``: the product names to suggest from, or a Callidus .est holding them.
     ``min_opening``: openings smaller than this (m2) are measured through."""
     pdf = Path(pdf)
-    dwg = read_drawing(pdf, page=page)
+    dwg = read_drawing(pdf, page=page, scale=scale)
     legend = read_legend(dwg)
     kwargs = {} if min_opening is None else {"min_opening": min_opening}
     rooms, report = find_rooms(dwg, legend, exclude=exclude, **kwargs)
