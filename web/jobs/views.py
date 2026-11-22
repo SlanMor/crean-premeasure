@@ -16,6 +16,7 @@ from .forms import (
     ProductsForm,
     ProjectForm,
     RulesForm,
+    ScaleForm,
     SetupFormSet,
     StarterForm,
     TemplateForm,
@@ -234,6 +235,7 @@ def new_premeasure(request, pk: int):
             pm = Premeasure.objects.create(
                 project=project, level=d["level"], title=safe_name(title), drawing=upload, page=1,
                 starter=job.upload, created_by=request.user, batch=batch, status=Premeasure.Status.QUEUED,
+                scale=d.get("scale"),
             )
             single = pm if len(d["drawings"]) == 1 else None
             todo.append(("jobs.tasks.analyse_premeasure", pm.pk))
@@ -341,6 +343,20 @@ def reread(request, pk: int):
         if pm.analysis_file:
             pm.analysis_file.delete(save=False)
         pm.status = Premeasure.Status.QUEUED
+        pm.save()
+        enqueue("jobs.tasks.analyse_premeasure", pm.pk)
+    return redirect("premeasure", pk=pk)
+
+
+@login_required
+@require_POST
+def set_scale(request, pk: int):
+    """The sheet has no scale printed: the estimator gives it, and the drawing is read again."""
+    pm = get_object_or_404(Premeasure, pk=pk)
+    form = ScaleForm(request.POST)
+    if form.is_valid() and not pm.busy:
+        pm.scale = form.cleaned_data["scale"]
+        pm.status, pm.error = Premeasure.Status.QUEUED, ""
         pm.save()
         enqueue("jobs.tasks.analyse_premeasure", pm.pk)
     return redirect("premeasure", pk=pk)

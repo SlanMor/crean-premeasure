@@ -230,3 +230,37 @@ def test_product_number_in_the_description_beats_a_matching_code():
     names = ["FF4 - muovihaka 12mm recessed combo matting 16mm", "FF3 - Altro Classic R11 Graphite X2546R11"]
     (s,) = suggest_materials(entries, names)
     assert s.material == names[1]
+
+
+def test_scale_written_in_different_ways():
+    from premeasure_engine.drawing.pdf_reader import TextItem, read_scale
+
+    def t(*texts):
+        return [TextItem(x, (0, 0, 1, 1)) for x in texts]
+
+    assert read_scale(t("1 : 100")) == 100
+    assert read_scale(t("SCALE 1:50 @ A1")) == 50
+    assert read_scale(t("1:100@A0", "Key plan 1:500")) == 100  # a tie goes to the larger drawing
+    assert read_scale(t("1/200")) == 200
+    assert read_scale(t("1 : 100 P09-3")) == 100
+    assert read_scale(t("ratio 1:3 mix", "NTS")) is None  # not a plan scale
+    assert read_scale(t("Key plan 1:500", "SCALE 1:100")) == 100  # next to SCALE counts double
+    assert read_scale([], "DRAWING TITLE\\nSCALE: 1:100 @ A1\\n") == 100  # text inside nested groups
+
+
+def test_a_picture_of_a_drawing_is_refused_plainly(tmp_path):
+    import pypdfium2 as pdfium
+    from PIL import Image
+
+    from premeasure_engine.drawing.pdf_reader import PictureOnly, read_drawing
+
+    pdf = pdfium.PdfDocument.new()
+    page = pdf.new_page(842, 595)
+    img = pdfium.PdfImage.new(pdf)
+    img.set_bitmap(pdfium.PdfBitmap.from_pil(Image.new("RGB", (400, 280), (200, 230, 200))))
+    img.set_matrix(pdfium.PdfMatrix().scale(842, 595))
+    page.insert_obj(img)
+    page.gen_content()
+    pdf.save(tmp_path / "scan.pdf")
+    with pytest.raises(PictureOnly, match="picture of the drawing"):
+        read_drawing(tmp_path / "scan.pdf")

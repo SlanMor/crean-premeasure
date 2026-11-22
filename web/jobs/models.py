@@ -242,6 +242,9 @@ class Premeasure(models.Model):
     title = models.CharField(max_length=120, help_text="Name for the Callidus file.")
     drawing = models.ForeignKey(Upload, on_delete=models.PROTECT, related_name="premeasures")
     page = models.PositiveIntegerField(default=1)
+    scale = models.PositiveIntegerField(
+        null=True, blank=True, help_text="Drawing scale 1:N, only when it is not printed on the sheet."
+    )
     starter = models.ForeignKey(
         Upload, on_delete=models.PROTECT, related_name="premeasures_started", null=True, blank=True,
         help_text="The project's Callidus job this was written from; empty means the house template.",
@@ -269,6 +272,15 @@ class Premeasure(models.Model):
     @property
     def busy(self) -> bool:
         return self.status in (self.Status.QUEUED, self.Status.READING, self.Status.WRITING)
+
+    @property
+    def needs_scale(self) -> bool:
+        return self.status == self.Status.FAILED and self.error.startswith("No drawing scale")
+
+    @property
+    def plain_error(self) -> bool:
+        """A failure explained in plain words (not a program error)."""
+        return self.error.startswith(("No drawing scale", "This PDF is a picture"))
 
 
 class Batch(models.Model):

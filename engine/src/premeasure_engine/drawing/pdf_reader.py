@@ -175,14 +175,53 @@ def _text(obj, textpage) -> str:
     return buf.raw.decode("utf-16-le", errors="replace").replace("\x00", "").strip()
 
 
-def read_scale(texts: list[TextItem]) -> float | None:
-    """The most common '1 : N' on the sheet."""
-    found = Counter()
+# scales architects use for plans; anything else ("1:3" in a note) is ignored
+PLAN_SCALES = {20, 25, 50, 75, 100, 125, 150, 200, 250, 500}
+_SCALE = re.compile(r"(?<![\d.,])1\s*(?::|/)\s*(\d{2,4})(?![\d.,])")
+
+
+class ScaleNotFound(ValueError):
+    """No drawing scale printed on the sheet."""
+
+
+class PictureOnly(ValueError):
+    """The PDF holds a picture of the drawing (scanned or flattened), not its linework."""
+
+
+def _picture_only(pg) -> bool:
+    paths = images = 0
+    for obj in pg.get_objects():  # every depth, including nested groups
+        if obj.type == R.FPDF_PAGEOBJ_PATH:
+            paths += 1
+            if paths > 50:
+                return False
+        elif obj.type == R.FPDF_PAGEOBJ_IMAGE:
+            images += 1
+    return images > 0
+
+
+def read_scale(texts: list[TextItem], page_text: str = "") -> float | None:
+    """The sheet's drawing scale: the most common '1:N' (also '1 : N', '1/N',
+    'SCALE 1:100 @ A1') among plan scales. Text next to the word SCALE counts
+    double. A tie goes to the larger drawing (smaller N): key plans are drawn
+    smaller. ``page_text`` is the page's whole text, which also holds text
+    that sits inside nested drawing groups."""
+    found: Counter = Counter()
     for t in texts:
-        m = re.fullmatch(r"1\s*:\s*(\d+)", t.text.strip())
-        if m:
-            found[int(m.group(1))] += 1
-    return float(found.most_common(1)[0][0]) if found else None
+        for m in _SCALE.finditer(t.text):
+            n = int(m.group(1))
+            if n in PLAN_SCALES:
+                found[n] += 2 if "SCALE" in t.text.upper() else 1
+    if not found and page_text:
+        for line in page_text.splitlines():
+            for m in _SCALE.finditer(line):
+                n = int(m.group(1))
+                if n in PLAN_SCALES:
+                    found[n] += 2 if "SCALE" in line.upper() else 1
+    if not found:
+        return None
+    best = max(found.values())
+    return float(min(n for n, c in found.items() if c == best))
 
 
 def read_drawing(path: str | Path, page: int = 0, scale: float | None = None) -> Drawing:
@@ -191,6 +230,12 @@ def read_drawing(path: str | Path, page: int = 0, scale: float | None = None) ->
     pdf = pdfium.PdfDocument(str(path))
     try:
         pg = pdf[page]
+        if _picture_only(pg):
+            raise PictureOnly(
+                "This PDF is a picture of the drawing (scanned or saved as an image), not the drawing itself, "
+                "so there are no finish areas or room tags to read. Ask the architect for the PDF exported "
+                "from their drawing software."
+            )
         x0, y0, x1, y1 = pg.get_mediabox()
         rot = pg.get_rotation() % 360
         uw, uh = x1 - x0, y1 - y0  # unrotated page size, points
@@ -204,9 +249,11 @@ def read_drawing(path: str | Path, page: int = 0, scale: float | None = None) ->
                     raw_texts.append((t, obj.get_bounds()))
         if scale is None:
             pts = [TextItem(t, b) for t, b in raw_texts]
-            scale = read_scale(pts)
+            scale = read_scale(pts, tp.get_text_range())
             if scale is None:
-                raise ValueError("no '1 : N' scale found on the sheet; pass scale=")
+                raise ScaleNotFound(
+                    "No drawing scale (such as 1:100) is printed on this sheet. Enter the scale and read it again."
+                )
         k = M_PER_INCH / PT_PER_INCH * scale
 
         def tf(px: float, py: float) -> tuple[float, float]:

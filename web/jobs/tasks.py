@@ -62,8 +62,10 @@ def safe_name(text: str) -> str:
 
 
 def _fail(pm: Premeasure, exc: Exception) -> None:
+    from premeasure_engine.drawing.pdf_reader import PictureOnly, ScaleNotFound
+
     pm.status = Premeasure.Status.FAILED
-    pm.error = f"{type(exc).__name__}: {exc}"
+    pm.error = str(exc) if isinstance(exc, (PictureOnly, ScaleNotFound)) else f"{type(exc).__name__}: {exc}"
     pm.save(update_fields=["status", "error", "updated_at"])
 
 
@@ -84,7 +86,8 @@ def _analysis(pm: Premeasure):
                 return pickle.load(f)  # written by our own worker, never uploaded
         except Exception:
             pass  # stale after an engine update: read the drawing again
-    return analyse(pm.drawing.file.path, _setup_names(pm), page=pm.page - 1, min_opening=_min_opening(pm))
+    return analyse(pm.drawing.file.path, _setup_names(pm), page=pm.page - 1, min_opening=_min_opening(pm),
+                   scale=pm.scale)
 
 
 def _save_file(pm: Premeasure, field: str, path: Path) -> None:
@@ -102,7 +105,8 @@ def analyse_premeasure(pk: int) -> None:
     pm.status, pm.error = Premeasure.Status.READING, ""
     pm.save(update_fields=["status", "error", "updated_at"])
     try:
-        a = analyse(pm.drawing.file.path, _setup_names(pm), page=pm.page - 1, min_opening=_min_opening(pm))
+        a = analyse(pm.drawing.file.path, _setup_names(pm), page=pm.page - 1, min_opening=_min_opening(pm),
+                    scale=pm.scale)
         pm.summary = summary(a)
         pm.summary["min_opening_m2"] = _min_opening(pm)
         pm.finish_products, pm.skirting_products = default_mapping(pm.project, pm.summary)

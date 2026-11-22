@@ -26,6 +26,7 @@
     <div class="form-grid">
       {% with field=form.level %}{% include "jobs/_field.html" %}{% endwith %}
       {% with field=form.revision %}{% include "jobs/_field.html" %}{% endwith %}
+      {% with field=form.scale %}{% include "jobs/_field.html" %}{% endwith %}
     </div>
     {% with field=form.auto_write %}{% include "jobs/_field.html" %}{% endwith %}
     {% with field=form.notify %}{% include "jobs/_field.html" %}{% endwith %}

@@ -28,10 +28,22 @@
 </script>
 {% elif pm.status == "failed" %}
 <div class="card">
+  {% if pm.needs_scale %}
+  <h2>What scale is this drawing?</h2>
+  <p>{{ pm.error }}</p>
+  <form method="post" action="{% url 'set_scale' pm.pk %}" style="display:flex;gap:8px;align-items:flex-end;max-width:360px">{% csrf_token %}
+    <div class="field" style="margin:0;flex:1"><label for="id_scale">Scale 1:</label><input type="number" name="scale" id="id_scale" value="100" min="1" max="5000"></div>
+    <button class="btn">Read it again</button>
+  </form>
+  {% elif pm.plain_error %}
+  <h2>This drawing cannot be read</h2>
+  <p>{{ pm.error }}</p>
+  {% else %}
   <h2>Something went wrong</h2>
   <p>{% if pm.summary %}The Callidus files could not be written.{% else %}The drawing could not be read.{% endif %} The detail below is for whoever supports the platform.</p>
   <pre style="white-space:pre-wrap" class="muted">{{ pm.error }}</pre>
   <form method="post" action="{% url 'retry' pm.pk %}">{% csrf_token %}<button class="btn">Try again</button></form>
+  {% endif %}
 </div>
 {% endif %}
 

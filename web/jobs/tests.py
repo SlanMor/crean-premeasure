@@ -272,3 +272,23 @@ class FlowTest(TestCase):
         self.assertContains(r, "no longer in the product list")
         pm.refresh_from_db()
         self.assertEqual(pm.status, Premeasure.Status.REVIEW)
+
+
+@skipUnless(CASHEL and CASHEL.exists(), "PREMEASURE_FIXTURES not set")
+class ScaleTest(TestCase):
+    def test_a_missing_scale_can_be_given_and_the_drawing_read_again(self):
+        media = tempfile.mkdtemp()
+        with override_settings(MEDIA_ROOT=media, JOBS_INLINE=True):
+            self.client.force_login(User.objects.create_user("est"))
+            project = Project.objects.create(code="C", name="x")
+            drawing = Upload.objects.create(project=project, kind=Upload.Kind.DRAWING,
+                                            file=SimpleUploadedFile("p2.pdf", (CASHEL / "finishes-P2.pdf").read_bytes()))
+            pm = Premeasure.objects.create(project=project, title="t", drawing=drawing,
+                                           status=Premeasure.Status.FAILED,
+                                           error="No drawing scale (such as 1:100) is printed on this sheet.")
+            self.assertTrue(pm.needs_scale)
+            self.assertContains(self.client.get(reverse("premeasure", args=[pm.pk])), "What scale is this drawing?")
+            self.client.post(reverse("set_scale", args=[pm.pk]), {"scale": "100"})
+            pm.refresh_from_db()
+            self.assertEqual((pm.scale, pm.status, pm.summary["scale"]), (100, Premeasure.Status.REVIEW, 100.0))
+        shutil.rmtree(media, ignore_errors=True)

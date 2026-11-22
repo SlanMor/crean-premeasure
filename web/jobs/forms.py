@@ -86,6 +86,10 @@ class UploadDrawingsForm(forms.Form):
     )
     level = forms.CharField(max_length=100, required=False, help_text="Optional, for example Ground floor.")
     revision = forms.CharField(max_length=30, required=False)
+    scale = forms.IntegerField(
+        label="Scale 1:", required=False, min_value=1, max_value=5000,
+        help_text="Leave blank: it is read from the drawing. Only fill in if the sheet has no scale printed.",
+    )
     auto_write = forms.BooleanField(
         label="Write the Callidus files automatically", required=False, initial=True,
         help_text="For each drawing where every finish has a product in the project setup. "
@@ -264,3 +268,7 @@ class UserForm(forms.ModelForm):
         if commit:
             user.save()
         return user
+
+
+class ScaleForm(forms.Form):
+    scale = forms.IntegerField(label="Scale 1:", min_value=1, max_value=5000, initial=100)
