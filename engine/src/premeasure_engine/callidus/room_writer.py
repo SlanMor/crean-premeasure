@@ -31,7 +31,7 @@ ZERO18 = bytes(18)
 _AFTER_ORIGIN = bytes(8)  # +33
 _AFTER_ANGLES = b"\x01\x00\x00\x00\x00"  # +49
 _COUNTS = struct.pack("<II", 1, 1)  # +84
-_BEFORE_REF = bytes(16)  # +98
+_BEFORE_REF = bytes(14)  # +100, after the uint16 at +96 and the sub-room count at +98
 _TAIL_FIXED = bytes.fromhex(  # +144 to +236
     "0000000001000000010000000000000000000000000000000100000000000000"
     "010000000000003f0000003f0000000000000000000000000000000000000000"
@@ -146,6 +146,76 @@ def _cstring(raw: bytes) -> bytes:
     return b"\xff\xff\xff" + struct.pack("<I", len(raw)) + raw
 
 
+@dataclass
+class RoomHead:
+    """The part of any room before its zone: outline, name and settings."""
+
+    vertices: list[tuple[float, float]]
+    edges: list[bytes]
+    name: str
+    callidus_id: str
+    material: int
+    origin: tuple[float, float]
+    angle: float
+    angle2: float
+    label: tuple[float, float]
+    ref_edge: int
+    sub_rooms: int
+    ref_point: tuple[float, float] | None = None
+    flags: tuple[int, int] | None = None
+
+
+def _read_tag(r: _Reader) -> int | None:
+    """Read a class tag; return the class index, or None for a declaration."""
+    tag = r.u16()
+    if tag == 0xFFFF:
+        r.u16()  # schema
+        r.take(r.u16())  # class name
+        return None
+    if not tag & 0x8000:
+        raise RoomFormatError("expected a class tag")
+    return tag & 0x7FFF
+
+
+def parse_room_head(data: bytes, pos: int) -> RoomHead:
+    """Read the room fields that come before the zone, for any room.
+
+    Works for rooms with layouts and for the first room in a file (which
+    declares the Room class). For rooms with sub-rooms, the fields after the
+    sub-rooms are not read.
+    """
+    r = _Reader(data, pos)
+    _read_tag(r)
+    vertices, edges = r.poly()
+    xml = r.cstring().decode(ENCODING)
+    if "<name/>" in xml:
+        name = ""
+    else:
+        name = xml.split("<name>", 1)[1].split("</name>", 1)[0]
+    cid = xml.split("<CallidusID>", 1)[1].split("</CallidusID>", 1)[0]
+    material = r.u16()
+    r.expect(b"\x00", "byte after material")
+    origin = r.point("origin")
+    r.expect(_AFTER_ORIGIN, "bytes after origin")
+    angle, angle2 = r.f32(), r.f32()
+    r.expect(_AFTER_ANGLES, "bytes after angles")
+    label = r.point("label")
+    r.expect(_COUNTS, "counts")
+    ref_edge = r.u32()
+    r.expect(b"\x00\x00", "uint16 at +96")
+    sub_rooms = r.u16()
+    head = RoomHead(vertices, edges, name, cid, material, origin, angle, angle2, label, ref_edge, sub_rooms)
+    if sub_rooms == 0:
+        r.expect(_BEFORE_REF, "bytes before reference point")
+        head.ref_point = r.point("reference point")
+        tail = r.take(len(_TAIL_FIXED))
+        flags = tuple(tail[i] for i in _TAIL_FLAGS)
+        if _tail(flags) != tail:
+            raise RoomFormatError("unexpected fixed room fields")
+        head.flags = flags
+    return head
+
+
 def parse_room(data: bytes, pos: int) -> tuple[RoomRecord, int]:
     """Parse a no-layout room whose object tag starts at `pos`.
 
@@ -174,6 +244,7 @@ def parse_room(data: bytes, pos: int) -> tuple[RoomRecord, int]:
     label = r.point("label")
     r.expect(_COUNTS, "counts")
     ref_edge = r.u32()
+    r.expect(b"\x00\x00", "uint16 at +96")
     if r.u16() != 0:
         raise RoomFormatError("room has sub-rooms")
     r.expect(_BEFORE_REF, "bytes before reference point")
@@ -246,12 +317,24 @@ def _poly(vertices, edges) -> bytes:
     return b"".join(out)
 
 
-def serialise_room(rec: RoomRecord) -> bytes:
-    """Write a no-layout room: the Room object followed by its zone."""
+def _class_tag(index: int, name: str, declare: bool) -> bytes:
+    """MFC class tag: a new-class declaration the first time, then a reference."""
+    if declare:
+        raw = name.encode("ascii")
+        return b"\xff\xff" + struct.pack("<HH", 1, len(raw)) + raw
+    return struct.pack("<H", 0x8000 | index)
+
+
+def serialise_room(rec: RoomRecord, *, declare_classes: bool = False) -> bytes:
+    """Write a no-layout room: the Room object followed by its zone.
+
+    With declare_classes the Room and OldSheetZone classes are declared
+    rather than referenced, as Callidus does for the first room in a file.
+    """
     zone_edges = rec.zone_edges or [ZERO18] * len(rec.vertices)
     return b"".join(
         [
-            struct.pack("<H", 0x8000 | rec.room_class),
+            _class_tag(rec.room_class, "Room", declare_classes),
             _poly(rec.vertices, rec.edges),
             _cstring(_name_xml(rec.name, rec.callidus_id)),
             struct.pack("<H", rec.material),
@@ -263,11 +346,12 @@ def serialise_room(rec: RoomRecord) -> bytes:
             _point(rec.label),
             _COUNTS,
             struct.pack("<I", rec.ref_edge),
-            b"\x00\x00",
+            b"\x00\x00",  # +96, always 0
+            b"\x00\x00",  # +98, no sub-rooms
             _BEFORE_REF,
             _point(rec.ref_point),
             _tail(rec.flags),
-            struct.pack("<H", 0x8000 | rec.zone_class),
+            _class_tag(rec.zone_class, "OldSheetZone", declare_classes),
             _poly(rec.vertices, zone_edges),
             b"\x00\x00",
             _point(rec.origin),

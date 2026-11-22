@@ -24,8 +24,9 @@ A Microsoft MFC `CArchive` binary.
   - +45: float32, usually 0 (meaning not known).
   - +54: point record, the label position (confirmed by T3: moving it moved the label).
   - +84: uint32 1, uint32 1, then uint32 reference edge index (always less than the vertex count).
-  - +96: uint16 number of sub-rooms, followed by the sub-room objects.
-  - +98 (after any sub-rooms): 16 zero bytes, then at +114 a point record at or near the first vertex.
+  - +96: uint16, always 0.
+  - +98: uint16 number of sub-rooms, followed by the sub-room objects.
+  - +100 (after any sub-rooms): 14 zero bytes, then at +114 a point record at or near the first vertex.
   - +144: 92 bytes that are the same in every room except two flag bytes (+222 and +234; meaning not known).
   - +0xec: the zone object tag; +0xee the zone outline. In 139 rooms the zone outline matches the room; in the rest it differs, usually because the room has been laid out.
 - **A room with no layout** (written by `callidus/room_writer.py`, byte-exact on 17 rooms across the nine files):
@@ -41,11 +42,17 @@ A Microsoft MFC `CArchive` binary.
 - **Net area:** room area minus any room inside it.
 - **Skirting:** either per edge (byte 12), or room-level (every edge with all 18 bytes zero), depending on how the job was set up.
 
+- **Tail section** (after the room list, found by the bytes `00 00 1a 00 00 00 04 Item`, identical in layout in all nine files):
+  - uint16 0, uint32 26 and 26 strings "Item", fixed fields, a uint16 object reference (Cashel and Limerick: object 2, the NONE material), floats.
+  - At 265 bytes from the start: one list per finish plus four (uint16 count, then uint16 object references to stock rolls), then uint32 1000 at the end of the file. A file with no layouts has every list empty.
+- **Whole job** (written by `callidus/job_writer.py`): header and finishes copied from a Crean file, a new room list, and the tail with empty lists. The first room declares the `Room` and `OldSheetZone` classes; after that every number follows in order.
+
 ## .CalBack (background)
 
 - uint32 at offset 4: number of sheet images.
 - Before each image, a 0x2c-byte record: float32 x-left, y-top, x-right, y-bottom at offsets 8, 12, 16, 20; uint32 image length at 0x28.
-- Each image is a 1-bit TIFF, CCITT Group 4, at 300 to 600 dpi.
+- Each image is a 1-bit TIFF, CCITT Group 4, at 300 to 600 dpi. In all eleven samples it is big-endian, WhiteIsZero, with 3 or 6 rows per strip. A uint32 1000 follows the last image.
+- Cashel's background is the architect's PDF at exactly 300 dpi (A1 gives 9933 by 7016 pixels, rounded to the nearest pixel), and our render of the PDF lines up with it to the pixel. `callidus/calback_writer.py` renders a PDF page, writes the TIFF in the same form, and puts it in a copy of a template .CalBack.
 - Several sheets can sit in one floor file (Shellybanks ground and first floor have two each).
 - A float at offset 0x2c appears to relate to scale calibration (values seen: 0.9986, 1.0, 1.9975, 2.0, 4.0001); its exact meaning is not confirmed. Limerick sheet sizes differ from nominal A0 by 0.12 to 0.14%, which suggests the estimator calibrated them.
 
@@ -79,6 +86,8 @@ Optional: re-do G25's layout from the Layout menu in T3, to confirm a stale layo
 T5 was built instead of removing G25's layout: G25's 12 layout objects are referred to from the roll list at the end of the file, and taking them out would renumber every object after G25. Replacing a no-layout room keeps every object number the same. Expected in Callidus: T5 TEST ROOM net 12.00 m², perimeter 14.00 m, FF6; FF6 net total 196.51 m² (was 184.51); FF8 net total 331.47 m² (was 333.02).
 
 T5 result (22 November 2026): passed. The file opens with no errors. T5 TEST ROOM shows net 12.00 m², perimeter 14.00 m, FF6, drawn with its skirting edges in blue like Callidus's own skirted rooms, and the FF6 net total is 196.51 m². Saving in Callidus, closing and reopening keeps the room. FF6 gross stayed at 208.57 m², so the room had not been laid out in that screenshot; laying it out from the Layout menu is still to be confirmed.
+
+T6 (22 November 2026): the whole Cashel job written by our writer: Crean's finishes, all 51 sheet-finish rooms, no layouts. T6a uses the original background, T6b one rendered from the PDF. Left out: two FF1 carpet tile rooms (tile zones not written yet) and the three NetZone cut-outs inside "GF Circulation West Design 1", which is written whole. Expected net totals as the original except FF8: 342.92 m² (333.02 plus the 9.90 m² of cut-outs). Results: awaiting Crean.
 
 Practical note: Callidus would not open any file from the estimator's Z: drive (a folder whose name it shows as "Callidus?"), giving "Cannot open file". The same file opened from a local folder. Delivered files need to be saved to a local folder with a plain name before opening.
 
