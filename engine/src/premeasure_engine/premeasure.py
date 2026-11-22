@@ -24,7 +24,8 @@ from pathlib import Path
 
 from .callidus import read_calback, read_est
 from .callidus.calback_writer import encode_tiff, render_pdf_page, sheet_extents, write_calback
-from .callidus.job_writer import build_job, check_rooms, load_template
+from .callidus.job_writer import build_job, check_rooms
+from .callidus.material_writer import NewProduct, extend_template
 from .drawing import Legend, LegendEntry, Room, find_rooms, read_drawing, read_legend
 from .drawing.products import suggest_materials
 from .drawing.to_callidus import room_name, to_records
@@ -77,13 +78,17 @@ def calback_sheets(path: str | Path) -> int:
     return len(read_calback(path).sheets)
 
 
-def analyse(pdf: str | Path, starter_est: str | Path, page: int = 0, exclude: list[tuple] | None = None) -> Analysis:
+def analyse(
+    pdf: str | Path, products: str | Path | list[str], page: int = 0, exclude: list[tuple] | None = None
+) -> Analysis:
+    """``products``: the product names to suggest from, or a Callidus .est holding them."""
     pdf = Path(pdf)
     dwg = read_drawing(pdf, page=page)
     legend = read_legend(dwg)
     rooms, report = find_rooms(dwg, legend, exclude=exclude)
-    est = read_est(starter_est)
-    materials = [m.name for m in est.materials if m.name not in NOT_A_PRODUCT]
+    if isinstance(products, (str, Path)):
+        products = [m.name for m in read_est(products).materials]
+    materials = [m for m in products if m not in NOT_A_PRODUCT]
 
     entries: list[LegendEntry] = list(legend.entries)
     in_legend = {id(e) for e in entries}
@@ -186,12 +191,14 @@ def write_outputs(
     skirting_products: dict[str, str],
     out_dir: str | Path,
     name: str,
+    new_products: list[NewProduct] | None = None,
 ) -> Outputs:
     """Write the pre-measured job. ``finish_products`` maps a finish code to a
-    product name in the starter file; finishes not in it are left out.
-    ``skirting_products`` does the same for skirting put on room edges."""
-    est = read_est(starter_est)
-    index = {m.name: m.index for m in est.materials}
+    product name in the starter file, or in ``new_products`` (products added
+    to the job, each copying the settings of a product already in it);
+    finishes not mapped are left out. ``skirting_products`` does the same for
+    skirting put on room edges."""
+    template, index = extend_template(starter_est, list(new_products or []))
     unknown = [p for p in list(finish_products.values()) + list(skirting_products.values()) if p not in index]
     if unknown:
         raise ValueError(f"not in the starter file: {', '.join(sorted(set(unknown)))}")
@@ -205,8 +212,10 @@ def write_outputs(
     out_dir.mkdir(parents=True, exist_ok=True)
 
     est_path = out_dir / f"{name}.est"
-    est_path.write_bytes(build_job(load_template(starter_est), records))
-    read_est(est_path)  # fails loudly if we wrote something we cannot read back
+    est_path.write_bytes(build_job(template, records))
+    back = read_est(est_path)  # fails loudly if we wrote something we cannot read back
+    if {m.name: m.index for m in back.materials} != index or len(back.rooms) != len(records):
+        raise ValueError("the written file does not read back as written")
 
     img = render_pdf_page(a.pdf, a.page, BACKGROUND_DPI)
     calback_path = Path(str(est_path) + ".CalBack")

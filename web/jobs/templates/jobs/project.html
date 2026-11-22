@@ -6,6 +6,36 @@
 <p class="sub">{% if project.client %}{{ project.client }}{% endif %}{% if project.main_contractor %} · {{ project.main_contractor }}{% endif %}{% if project.site %} · {{ project.site }}{% endif %}</p>
 
 <div class="card">
+  <h2>1. Project setup</h2>
+  {% if products %}
+  <p>{{ products|length }} product{{ products|length|pluralize }} set up for this tender. <a href="{% url 'setup' project.pk %}">Change them</a></p>
+  <table>
+    <tr><th></th><th>Finish code</th><th>Product</th></tr>
+    {% for p in products %}<tr><td>{% if p.fill %}<span class="swatch" style="background:{{ p.fill }}"></span>{% endif %}</td><td>{{ p.finish_code|default:"-" }}</td><td>{{ p.name }}</td></tr>{% endfor %}
+  </table>
+  {% else %}
+  <p>Set up the products this tender uses. You can type them in, fill them from a drawing's legend, or import them from a Callidus job.</p>
+  <p><a class="btn" href="{% url 'setup' project.pk %}">Set up products</a></p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>2. Add a finishes drawing</h2>
+  {% if not job %}<p class="note">There is no Callidus job to build on yet. Ask the administrator to add the house Callidus template.</p>{% endif %}
+  <form method="post" action="{% url 'new_premeasure' project.pk %}" enctype="multipart/form-data">{% csrf_token %}
+    <div class="grid">
+      {% with field=form.drawing %}{% include "jobs/_field.html" %}{% endwith %}
+      {% with field=form.page %}{% include "jobs/_field.html" %}{% endwith %}
+      {% with field=form.level %}{% include "jobs/_field.html" %}{% endwith %}
+      {% with field=form.revision %}{% include "jobs/_field.html" %}{% endwith %}
+    </div>
+    {% with field=form.title %}{% include "jobs/_field.html" %}{% endwith %}
+    <button class="btn">Read the drawing</button>
+    <span class="muted" style="margin-left:10px">Takes one to three minutes. You can leave the page.</span>
+  </form>
+</div>
+
+<div class="card">
   <h2>Drawings</h2>
   {% if premeasures %}
   <table>
@@ -18,56 +48,4 @@
   </table>
   {% else %}<p class="muted">No drawings yet.</p>{% endif %}
 </div>
-
-{% if starters %}
-<div class="card">
-  <h2>Add a finishes drawing</h2>
-  <form method="post" action="{% url 'new_premeasure' project.pk %}" enctype="multipart/form-data">{% csrf_token %}
-    <div class="grid">
-      {% with field=form.drawing %}{% include "jobs/_field.html" %}{% endwith %}
-      {% with field=form.page %}{% include "jobs/_field.html" %}{% endwith %}
-      {% with field=form.level %}{% include "jobs/_field.html" %}{% endwith %}
-      {% with field=form.revision %}{% include "jobs/_field.html" %}{% endwith %}
-    </div>
-    <div class="grid">
-      {% with field=form.starter %}{% include "jobs/_field.html" %}{% endwith %}
-      {% with field=form.title %}{% include "jobs/_field.html" %}{% endwith %}
-    </div>
-    <button class="btn">Read the drawing</button>
-    <span class="muted" style="margin-left:10px">Takes one to three minutes. You can leave the page.</span>
-  </form>
-</div>
-{% endif %}
-
-<div class="card">
-  <h2>Callidus products</h2>
-  <p class="muted">The drawing's finishes are matched to the products in a Callidus job for this project. Upload any job that has the products set up; its rooms are not used.</p>
-  {% if starters %}
-  <table style="margin-bottom:16px">
-    <tr><th>Callidus job</th><th>Background</th><th>Added</th></tr>
-    {% for s in starters %}
-    <tr><td>{{ s.filename }}</td><td>{% if s.background %}Yes{% else %}<span class="muted">No</span>{% endif %}</td>
-        <td class="muted">{{ s.uploaded_at|date:"j M Y" }}</td></tr>
-    {% endfor %}
-  </table>
-  {% endif %}
-  <form method="post" action="{% url 'add_starter' project.pk %}" enctype="multipart/form-data">{% csrf_token %}
-    <div class="grid">
-      {% with field=starter_form.est %}{% include "jobs/_field.html" %}{% endwith %}
-      {% with field=starter_form.calback %}{% include "jobs/_field.html" %}{% endwith %}
-    </div>
-    <button class="btn {% if starters %}secondary{% endif %}">Add Callidus job</button>
-  </form>
-</div>
-
-{% if products %}
-<div class="card">
-  <h2>Products confirmed on this project</h2>
-  <p class="muted">Used as the starting choice for each new drawing.</p>
-  <table>
-    <tr><th>Finish</th><th>Callidus product</th><th>From</th></tr>
-    {% for p in products %}<tr><td>{{ p.finish_code }}</td><td>{{ p.callidus_material }}</td><td class="muted">{{ p.spec_source }}</td></tr>{% endfor %}
-  </table>
-</div>
-{% endif %}
 {% endblock %}

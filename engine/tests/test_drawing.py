@@ -211,3 +211,22 @@ def test_same_code_light_finish_never_takes_the_dark_product():
     s = {x.legend_code: x for x in suggest_materials(entries, names)}
     assert s["M50-156"].material == names[0]
     assert s["M50-156 (2)"].material is None
+
+
+def test_product_number_on_another_finish_beats_a_matching_code():
+    # Cashel: the drawing's FF5 is matting, but Crean's "FF5" is Puffin AQI2005, the drawing's FF12
+    entries = [
+        LegendEntry("floor", 0, "", "MATTING MUOVIHAKA 12mm RECESSED COMBO 16mm", None, custom_code="FF5"),
+        LegendEntry("floor", 0, "", "ALTRO AQUARIUS SAFETY FLOORING COLOUR PUFFIN AQI2005", None, custom_code="FF12"),
+    ]
+    names = ["FF5 - Altro Aquarius R11 Puffin AQI2005", "FF4 - muovihaka 12mm recessed combo matting 16mm"]
+    s = {x.legend_code: x.material for x in suggest_materials(entries, names)}
+    assert s == {"FF5": names[1], "FF12": names[0]}
+
+
+def test_product_number_in_the_description_beats_a_matching_code():
+    # Cashel: the drawing's FF4 is Altro Classic X2546R11; Crean's "FF4" is matting
+    entries = [LegendEntry("floor", 0, "", "ALTRO CLASSIC 25 GRAPHITE X2546R11", None, custom_code="FF4")]
+    names = ["FF4 - muovihaka 12mm recessed combo matting 16mm", "FF3 - Altro Classic R11 Graphite X2546R11"]
+    (s,) = suggest_materials(entries, names)
+    assert s.material == names[1]

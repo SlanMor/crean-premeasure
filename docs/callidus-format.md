@@ -105,3 +105,14 @@ Practical note: Callidus would not open any file from the estimator's Z: drive (
 - Whether Callidus recalculates layouts when a file has rooms and zones but no layout objects.
 - Whether files differ between Callidus versions.
 - Four test files from Crean will settle most of this: a blank job with a drawing loaded; one rectangular room in a tile; the same room in a sheet product; the same room moved a known distance.
+
+## Products (materials) and adding new ones
+
+Decoded from Cashel, Shellybanks and Limerick (22 November 2026); written by `callidus/material_writer.py`.
+
+- The material list starts with a uint16 count, just before the `Material` class declaration (Cashel: 15 at 0x29).
+- Each product is one run of bytes: a reference to the Material class (0x8001, or its declaration for the first), a CString XML block `<matName>` with name and CallidusID, then 412 bytes of settings, then the product object: a class tag (ProductOLDSheet for sheet, ProductTile, ProductNet for edge products such as coved skirting and matwell frames, and NONE), a uint16 reference back to its Material, and uint32 1000 twice. Tile products also carry a tile grid XML block.
+- In the 412 settings bytes: display colour at 128 (R, G, B); a small number at 343 that rises product by product; at 360 a value that looks like a saved memory address; roll and waste settings we copy unchanged.
+- Adding a product: copy a sheet or edge product of the same kind that refers to its classes (not the first of its class), give it a new name and CallidusID and its own colour, set its back reference, and append it to the list; raise the count. Each new product takes two object numbers, so the Room class and every room move on by two. The tail gets one more empty stock-roll list per product.
+- Names are in the Windows character set (cp1252).
+- Test T8 (Cashel P2 with five products added): sent 22 November 2026, results awaited.

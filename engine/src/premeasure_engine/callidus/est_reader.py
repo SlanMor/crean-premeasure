@@ -152,7 +152,7 @@ def _read_materials(data: bytes) -> list[Material]:
         materials.append(
             Material(
                 index=mat_index,
-                name=html.unescape(m.group(1).decode("latin-1")).strip(),
+                name=html.unescape(m.group(1).decode("cp1252", "replace")).strip(),
                 callidus_id=m.group(2).decode("ascii", "replace"),
                 product_class=product_class,
                 tile_size_m=tile,
@@ -202,7 +202,7 @@ def read_est(path: str | Path, data: bytes | None = None) -> EstFile:
         ]
         est.rooms.append(
             Room(
-                name=html.unescape((m.group(1) or b"").decode("latin-1")).strip(),
+                name=html.unescape((m.group(1) or b"").decode("cp1252", "replace")).strip(),
                 callidus_id=m.group(2).decode("ascii", "replace"),
                 material_index=material_index,
                 material=by_index.get(material_index),
