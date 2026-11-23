@@ -16,6 +16,7 @@ from .forms import (
     ProductsForm,
     RulesForm,
     ScaleForm,
+    ScheduleForm,
     SetupFormSet,
     ShortlistForm,
     StarterForm,
@@ -81,6 +82,8 @@ def project(request, pk: int):
         {
             "project": project,
             "form": UploadDrawingsForm(),
+            "schedule": project.finishes_schedule(),
+            "schedule_form": ScheduleForm(),
             "premeasures": [(d, len(rooms_to_check(d)) if d.summary and not d.busy else 0) for d in drawings],
             "rows": rows,
             "n_chosen": sum(1 for r in rows if r.library_id),
@@ -410,6 +413,41 @@ def write(request, pk: int):
     pm.save()
     enqueue("jobs.tasks.write_premeasure", pm.pk)
     return redirect("premeasure", pk=pk)
+
+
+def _read_again(pm: Premeasure) -> bool:
+    if pm.busy:
+        return False
+    if pm.analysis_file:
+        pm.analysis_file.delete(save=False)
+    pm.status, pm.error = Premeasure.Status.QUEUED, ""
+    pm.save()
+    enqueue("jobs.tasks.analyse_premeasure", pm.pk)
+    return True
+
+
+@login_required
+@require_POST
+def project_schedule(request, pk: int):
+    """Add (or take away) the tender's finishes schedule, and read the drawings again with it."""
+    project = get_object_or_404(Project, pk=pk)
+    if request.POST.get("action") == "remove":
+        for up in project.uploads.filter(kind=Upload.Kind.SCHEDULE):
+            up.file.delete(save=False)
+            up.delete()
+        messages.success(request, "Finishes schedule taken away. Read the drawings again to measure without it.")
+        return redirect("project", pk=pk)
+    form = ScheduleForm(request.POST, request.FILES)
+    if not form.is_valid():
+        messages.error(request, " ".join(e for errs in form.errors.values() for e in errs))
+        return redirect("project", pk=pk)
+    Upload.objects.create(project=project, kind=Upload.Kind.SCHEDULE, file=form.cleaned_data["schedule"])
+    n = 0
+    if form.cleaned_data["reread"]:
+        n = sum(_read_again(pm) for pm in project.current_drawings())
+    messages.success(request, "Finishes schedule added." + (f" Reading {n} drawing{'s' if n != 1 else ''} again with it."
+                                                             if n else " It is used the next time a drawing is read."))
+    return redirect("project", pk=pk)
 
 
 @login_required

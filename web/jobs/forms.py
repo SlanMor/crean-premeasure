@@ -165,6 +165,32 @@ class MultipleFileField(forms.FileField):
         return [single(data, initial)]
 
 
+class ScheduleForm(forms.Form):
+    schedule = forms.FileField(
+        label="Finishes schedule (PDF)",
+        help_text="The schedule that lists each room's floor finish by room number, usually from the main "
+        "contractor. It settles rooms the legend gives a shared colour and flags rooms where it names "
+        "another finish.",
+    )
+    reread = forms.BooleanField(
+        label="Read this tender's drawings again now (room checks on them are cleared)", required=False,
+        initial=True,
+    )
+
+    def clean_schedule(self):
+        import pypdfium2 as pdfium
+
+        f = self.cleaned_data["schedule"]
+        if not f.name.lower().endswith(".pdf"):
+            raise forms.ValidationError("Upload the schedule as a PDF.")
+        try:
+            pdfium.PdfDocument(f.read()).close()
+        except Exception:
+            raise forms.ValidationError("This PDF could not be opened.")
+        f.seek(0)
+        return f
+
+
 class UploadDrawingsForm(forms.Form):
     drawings = MultipleFileField(
         label="Finishes drawings (PDF)",

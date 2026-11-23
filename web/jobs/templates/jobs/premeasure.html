@@ -92,6 +92,17 @@
     <div class="stat"><b>{{ n_written }}</b><span>areas with a product ({{ area_written|floatformat:"2g" }} m²)</span></div>
     <div class="stat"><b>{{ n_review }}</b><span>areas to check</span></div>
   </div>
+  {% with s=pm.summary.schedule %}{% if s %}
+  <p class="note" style="margin:16px 0 0"><b>Finishes schedule</b> ({{ s.source }}):
+  {% if s.error %}it could not be read ({{ s.error }}), so the drawing was measured without it.
+  {% elif not s.rooms_found %}none of this drawing's room numbers were found in it.
+  {% else %}{{ s.rooms_found }} room{{ s.rooms_found|pluralize }} found in it.
+  {% if s.settled %}{{ s.settled|length }} room{{ s.settled|length|pluralize }} the legend gives a shared colour {{ s.settled|length|pluralize:"was,were" }} settled from it ({{ s.settled_m2 }} m²).{% endif %}
+  {% if s.differs %}<b>{{ s.differs|length }} room{{ s.differs|length|pluralize }} where the schedule names a different finish from the drawing</b> ({% for d in s.differs %}{{ d.room }}{% if not forloop.last %}, {% endif %}{% endfor %}): marked to check.{% else %}It agrees with the drawing everywhere else.{% endif %}
+  {% endif %}</p>
+  {% elif pm.summary.shared_colours %}
+  <p class="note" style="margin:16px 0 0">The legend gives more than one finish the same colour ({{ pm.summary.shared_colours|join:"; " }}), so those rooms are measured under a combined code and marked to check. Add the tender's finishes schedule on the tender page and it settles them by room number.</p>
+  {% endif %}{% endwith %}
   {% if pm.summary.picture %}
   <p class="note" style="margin:16px 0 0"><b>Read from a picture of the drawing</b> (scanned or saved as an image), so every area is measured from colours and every room needs a check.
   Sheet {{ pm.summary.picture.sheet }} ({{ pm.summary.picture.sources.sheet }}), scale 1:{{ pm.summary.scale|floatformat:"0" }} ({{ pm.summary.picture.sources.scale }}).

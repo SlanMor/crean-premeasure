@@ -54,6 +54,23 @@
 </div>
 
 <div class="card">
+  <h2>Finishes schedule</h2>
+  {% if schedule %}
+  <p>Using <b>{{ schedule.filename }}</b>, added {{ schedule.uploaded_at|date:"j M Y" }}. Rooms are matched by room number: where the legend gives two finishes the same colour, the schedule settles which; where it names another finish, the room is marked to check.</p>
+  <form method="post" action="{% url 'project_schedule' project.pk %}" style="display:inline">{% csrf_token %}<input type="hidden" name="action" value="remove"><button class="linklike">Take it away</button></form>
+  <details style="margin-top:10px"><summary class="muted">Replace it with a newer schedule</summary>
+  {% else %}
+  <p class="muted">Optional. If the tender has a finishes schedule that lists each room's floor finish by room number, add it: Crean price from it, and it settles what the drawing's colours cannot.</p>
+  {% endif %}
+  <form method="post" action="{% url 'project_schedule' project.pk %}" enctype="multipart/form-data" style="margin-top:10px">{% csrf_token %}
+    {% with field=schedule_form.schedule %}{% include "jobs/_field.html" %}{% endwith %}
+    {% if premeasures %}{% with field=schedule_form.reread %}{% include "jobs/_field.html" %}{% endwith %}{% endif %}
+    <button class="btn secondary">Add the schedule</button>
+  </form>
+  {% if schedule %}</details>{% endif %}
+</div>
+
+<div class="card">
   <h2>Add more drawings</h2>
   {% if not job %}<p class="note">There is no Callidus job to build on yet. {% if user.is_staff %}Add it in <a href="{% url 'settings_template' %}">Settings, Callidus template</a>.{% else %}Ask the administrator to add the house Callidus template.{% endif %}</p>{% endif %}
   <form method="post" action="{% url 'new_premeasure' project.pk %}" enctype="multipart/form-data">{% csrf_token %}
