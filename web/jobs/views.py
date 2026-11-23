@@ -28,7 +28,8 @@ from .queue import enqueue
 from .setup import (
     base_job,
     base_products,
-    default_mapping,
+    chosen_differently,
+    drawing_mapping,
     fill_from_summary,
     house_job,
     house_template,
@@ -271,10 +272,8 @@ def batch_status(request, pk: int):
 
 
 def _mapping(pm: Premeasure) -> tuple[dict, dict]:
-    """Before the first write, follow the project setup as it is now; after it, the choices made."""
-    if pm.status == Premeasure.Status.REVIEW or (pm.status == Premeasure.Status.FAILED and not pm.output):
-        return default_mapping(pm.project, pm.summary)
-    return pm.finish_products, pm.skirting_products
+    """The project's products as they are now, with this drawing's own choices on top."""
+    return drawing_mapping(pm)
 
 
 def _rooms_view(pm: Premeasure, floors: dict) -> list[dict]:
@@ -309,6 +308,8 @@ def premeasure(request, pk: int):
             n_written=sum(r["written"] for r in rooms),
             missing=[f for f in pm.summary["finishes"] if norm(f["code"]) not in in_setup],
             unmapped=unmapped(pm.summary, floors, skirtings),
+            out_of_date=bool(pm.output) and pm.status == Premeasure.Status.DONE
+            and (floors, skirtings) != (pm.finish_products, pm.skirting_products),
         )
     ctx["sheets"] = ["A0", "A1", "A2", "A3", "A4"]
     return render(request, "jobs/premeasure.html", ctx)
@@ -325,8 +326,9 @@ def write(request, pk: int):
         messages.error(request, "One of the products is no longer in the product list. Please choose again.")
         return redirect("premeasure", pk=pk)
     pm.finish_products, pm.skirting_products = form.chosen()
+    pm.chosen_here = chosen_differently(pm, pm.finish_products, pm.skirting_products)
     if not pm.finish_products:
-        pm.save(update_fields=["finish_products", "skirting_products", "updated_at"])
+        pm.save(update_fields=["finish_products", "skirting_products", "chosen_here", "updated_at"])
         messages.error(request, "Choose a product for at least one finish.")
         return redirect("premeasure", pk=pk)
     pm.status, pm.error = Premeasure.Status.WRITING, ""

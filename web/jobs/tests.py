@@ -326,3 +326,51 @@ class PictureTest(TestCase):
             self.assertIn("no finish legend", pm.error)
             self.assertTrue(pm.plain_error and not pm.needs_scale)
         shutil.rmtree(media, ignore_errors=True)
+
+
+class DrawingProductsTest(TestCase):
+    """A drawing follows the project's products as they are now, even after it
+    has been written, except where a different product was chosen on it."""
+
+    def test_products_added_after_writing_show_on_the_drawing(self):
+        media = tempfile.mkdtemp()
+        with override_settings(MEDIA_ROOT=media):
+            self.client.force_login(User.objects.create_user("est"))
+            carpet = LibraryProduct.objects.create(name="Carpet A")
+            LibraryProduct.objects.create(name="Vinyl B")
+            LibraryProduct.objects.create(name="Lino C")
+            project = Project.objects.create(code="P", name="p")
+            finishes = [{"code": c, "kind": "floor", "description": "", "amount": 10.0, "fill": [1, 2, 3],
+                         "in_legend": True, "custom_code": False, "rooms": 1, "suggestion": "", "why": ""}
+                        for c in ("FF1", "FF2", "FF3")]
+            drawing = Upload.objects.create(project=project, kind=Upload.Kind.DRAWING,
+                                            file=SimpleUploadedFile("x.pdf", b"%PDF"))
+            pm = Premeasure.objects.create(
+                project=project, title="t", drawing=drawing, status=Premeasure.Status.DONE,
+                summary={"scale": 100, "finishes": finishes, "rooms": [], "unknown_fills": [], "manual_finishes": []},
+                finish_products={"FF1": "Vinyl B"}, output="outputs/t.zip",  # written before the setup had products
+            )
+            Product.objects.create(project=project, finish_code="FF1", library=carpet, kind="floor")
+            Product.objects.create(project=project, finish_code="FF2", library=carpet, kind="floor")
+
+            def shown():
+                form = self.client.get(reverse("premeasure", args=[pm.pk])).context["form"]
+                return {k: form[k].value() for k in form.fields}
+
+            # the project's products now cover FF1 and FF2, so they win over the older write
+            self.assertEqual(shown(), {"floor:FF1": "Carpet A", "floor:FF2": "Carpet A", "floor:FF3": ""})
+            self.assertContains(self.client.get(reverse("premeasure", args=[pm.pk])), "The products have changed")
+            # writing again keeps only what differs from the project's products
+            from unittest import mock
+
+            with mock.patch("jobs.views.enqueue"):
+                self.client.post(reverse("write", args=[pm.pk]),
+                                 {"floor:FF1": "Carpet A", "floor:FF2": "Carpet A", "floor:FF3": "Lino C"})
+            pm.refresh_from_db()
+            self.assertEqual(pm.chosen_here, {"floor": {"FF3": "Lino C"}, "skirting": {}})
+            pm.status = Premeasure.Status.DONE  # as when the write has finished
+            pm.save()
+            # a later change to the project's products reaches the drawing
+            Product.objects.filter(finish_code="FF2").update(library=LibraryProduct.objects.get(name="Vinyl B"))
+            self.assertEqual(shown(), {"floor:FF1": "Carpet A", "floor:FF2": "Vinyl B", "floor:FF3": "Lino C"})
+        shutil.rmtree(media, ignore_errors=True)

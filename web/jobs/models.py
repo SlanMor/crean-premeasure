@@ -255,8 +255,12 @@ class Premeasure(models.Model):
     )
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.READING)
     summary = models.JSONField(null=True, blank=True)
-    finish_products = models.JSONField(default=dict, blank=True)
+    finish_products = models.JSONField(default=dict, blank=True)  # as last written
     skirting_products = models.JSONField(default=dict, blank=True)
+    # Products chosen on this drawing that differ from the project's products
+    # ({"floor": {code: name}, "skirting": {...}}; "" means left out here).
+    # Everything else follows the project's products as they are now.
+    chosen_here = models.JSONField(default=dict, blank=True)
     analysis_file = models.FileField(upload_to="premeasure/work/", blank=True)
     preview = models.FileField(upload_to="premeasure/preview/", blank=True)
     output = models.FileField(upload_to="premeasure/output/", blank=True)
