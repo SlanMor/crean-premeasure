@@ -154,6 +154,8 @@ def analyse(
             amount = sum(r.skirting_lengths()[e.code] for r in mine)
         s = suggestions.get(e.code)
         good = s is not None and s.material is not None and s.score >= MIN_SCORE
+        if " or " in e.code:  # a shared colour: which product is the estimator's call, room by room
+            good = False
         finishes.append(
             Finish(
                 code=e.code,
