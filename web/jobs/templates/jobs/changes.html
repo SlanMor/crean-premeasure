@@ -1,0 +1,51 @@
+{% extends "jobs/base.html" %}
+{% block title %}Changes · {{ pm.title }}{% endblock %}
+{% block content %}
+<p class="muted"><a href="{% url 'project' project.pk %}">{{ project.code }} {{ project.name }}</a> / <a href="{% url 'premeasure' pm.pk %}">{{ pm.title }}</a></p>
+<h1>What changed</h1>
+<p class="sub"><a href="{% url 'premeasure' pm.pk %}">{{ pm.title }}</a>{% if pm.drawing.revision %} (rev {{ pm.drawing.revision }}){% endif %} against the drawing it replaces, <a href="{% url 'premeasure' old.pk %}">{{ old.title }}</a>{% if old.drawing.revision %} (rev {{ old.drawing.revision }}){% endif %}, room by room.{% if diff.shift.0 or diff.shift.1 %} The plan moved on the sheet ({{ diff.shift.0|floatformat:"2" }} m across, {{ diff.shift.1|floatformat:"2" }} m up); that is allowed for.{% endif %}</p>
+
+<div class="nextbar"><div class="text">
+  {% if n_changed %}<b>{{ n_changed }} room{{ n_changed|pluralize }} changed:</b> {{ counts.added|default:0 }} added, {{ counts.removed|default:0 }} removed, {{ counts.finish_changed|default:0 }} with a different finish, {{ counts.outline_changed|default:0 }} with a different outline. {{ counts.unchanged|default:0 }} unchanged{% if diff.carried_checks %}, and {{ diff.carried_checks }} room check{{ diff.carried_checks|pluralize }} carried over{% endif %}.
+  {% else %}<b>No rooms changed.</b> {{ counts.unchanged|default:0 }} rooms are as they were{% if diff.carried_checks %}, and their checks were carried over{% endif %}.{% endif %}
+</div>
+{% if to_check %}<a class="btn" href="{% url 'check' pm.pk %}">Check {{ to_check }} room{{ to_check|pluralize }}</a>{% endif %}
+</div>
+
+{% if back %}
+<div class="note">The Callidus job for {{ old.title }} came back checked on {{ back.uploaded_at|date:"j M" }}. Either make the changes below in that job, or write this revision and check it afresh; then upload it back.</div>
+{% endif %}
+
+<div class="card preview">
+  <p class="key"><span><span class="swatch" style="background:#16a050"></span> added</span>
+    <span><span class="swatch" style="background:#c81e1e"></span> removed (where it was)</span>
+    <span><span class="swatch" style="background:#e68c00"></span> finish or outline changed</span></p>
+  {% if pm.changes %}<a href="{% url 'changes_image' pm.pk %}" target="_blank"><img src="{% url 'changes_image' pm.pk %}?v={{ pm.updated_at|date:'U' }}" alt="The changes on the drawing"></a>{% endif %}
+</div>
+
+{% if by_finish %}
+<div class="card">
+  <h2>By finish</h2>
+  <table>
+    <tr><th>Finish</th><th class="num">Before m²</th><th class="num">Now m²</th><th class="num">Change m²</th></tr>
+    {% for f in by_finish %}<tr><td>{{ f.finish }}</td><td class="num">{{ f.old|floatformat:"2g" }}</td><td class="num">{{ f.new|floatformat:"2g" }}</td>
+      <td class="num"><b>{% if f.change > 0 %}+{% endif %}{{ f.change|floatformat:"2g" }}</b></td></tr>{% endfor %}
+  </table>
+</div>
+{% endif %}
+
+{% if changed %}
+<div class="card">
+  <h2>Rooms</h2>
+  <table>
+    <tr><th>What happened</th><th>Room</th><th>Finish before</th><th>Finish now</th><th class="num">Before m²</th><th class="num">Now m²</th></tr>
+    {% for r in changed %}
+    <tr><td>{% if r.state == "added" %}<span class="pill ok">Added</span>{% elif r.state == "removed" %}<span class="pill bad">Removed</span>{% else %}<span class="pill warn">{{ r.state|capfirst }}</span>{% endif %}</td>
+      <td>{% if r.new_id is not None %}<a href="{% url 'check' pm.pk %}?room={{ r.new_id }}">{{ r.label|default:"(no room tag)" }}</a>{% else %}{{ r.label|default:"(no room tag)" }}{% endif %}</td>
+      <td>{{ r.finish_old|default:"" }}</td><td>{{ r.finish_new|default:"" }}</td>
+      <td class="num">{{ r.area_old|floatformat:"2g" }}</td><td class="num">{{ r.area_new|floatformat:"2g" }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+{% endblock %}

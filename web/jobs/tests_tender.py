@@ -280,3 +280,82 @@ class RealDrawingTest(TenderBase):
         # reading again numbers the rooms afresh, so checks are cleared
         analyse_premeasure(pm.pk)
         self.assertFalse(RoomCheck.objects.filter(premeasure=pm).exists())
+
+
+class RevisionNameTest(TestCase):
+    def test_revision_read_from_file_names(self):
+        from .revisions import drawing_key, split_revision
+
+        self.assertEqual(split_revision("2005-KLA-00-ZZ-DR-A-110 P2.pdf"), ("2005-KLA-00-ZZ-DR-A-110", "P2"))
+        self.assertEqual(split_revision("AR-1627_C02.pdf"), ("AR-1627", "C02"))
+        self.assertEqual(split_revision("Finishes GF Rev B.pdf"), ("Finishes GF", "B"))
+        self.assertEqual(split_revision("plan (T1).pdf"), ("plan", "T1"))
+        # a lone letter is part of the name, not a revision: part A and part B are different drawings
+        self.assertEqual(split_revision("1st_floor_part_B.pdf"), ("1st_floor_part_B", ""))
+        self.assertNotEqual(drawing_key("1st_floor_part_A.pdf"), drawing_key("1st_floor_part_B.pdf"))
+        self.assertEqual(drawing_key("A-110 P1.pdf"), drawing_key("A-110_P2.pdf"))
+
+
+@skipUnless(CASHEL and CASHEL.exists(), "PREMEASURE_FIXTURES not set")
+class RevisionFlowTest(TenderBase):
+    def setUp(self):
+        super().setUp()
+        self.inline = override_settings(JOBS_INLINE=True)
+        self.inline.enable()
+        est = sorted(CASHEL.glob("*.est"))[0]
+        cb = sorted(CASHEL.glob("*.CalBack"))[0]
+        BackgroundTemplate.objects.create(file=SimpleUploadedFile("h.CalBack", cb.read_bytes()),
+                                          est=SimpleUploadedFile("h.est", est.read_bytes()))
+        self.project = Project.objects.create(code="C", name="Cashel")
+
+    def tearDown(self):
+        self.inline.disable()
+        super().tearDown()
+
+    def upload(self, name):
+        pdf = (CASHEL / "finishes-P2.pdf").read_bytes()
+        self.client.post(reverse("new_premeasure", args=[self.project.pk]),
+                         {"drawings": [SimpleUploadedFile(name, pdf)], "notify": ""})
+        return Premeasure.objects.order_by("-pk").first()
+
+    def test_new_revision_replaces_the_old_and_keeps_its_checks(self):
+        p1 = self.upload("2005-KLA-110 P1.pdf")
+        self.assertEqual(p1.status, Premeasure.Status.REVIEW, p1.error)
+        flagged = [r["id"] for r in p1.summary["rooms"] if r["status"] != "Verified"]
+        RoomCheck.objects.create(premeasure=p1, room_id=flagged[0], decision="ok")
+        p2 = self.upload("2005-KLA-110 P2.pdf")
+        p1.refresh_from_db()
+        self.assertEqual(p2.supersedes, p1)
+        self.assertEqual(p2.drawing.revision, "P2")
+        self.assertFalse(p1.is_current)
+        self.assertEqual(p2.revision_diff["counts"], {"unchanged": len(p1.summary["rooms"])})
+        self.assertEqual(p2.revision_diff["carried_checks"], 1)
+        self.assertTrue(RoomCheck.objects.filter(premeasure=p2, room_id=flagged[0], decision="ok").exists())
+        self.assertEqual(list(self.project.current_drawings()), [p2])
+        self.assertNotIn(flagged[0], [r["id"] for r in rooms_to_check(p2)])
+        page = self.client.get(reverse("changes", args=[p2.pk]))
+        self.assertContains(page, "No rooms changed.")
+        self.assertContains(self.client.get(reverse("premeasure", args=[p1.pk])), "Replaced by a later revision")
+        self.assertContains(self.client.get(reverse("project", args=[self.project.pk])), "1 earlier revision")
+        # the estimator says it is not a revision after all
+        self.client.post(reverse("set_revision", args=[p2.pk]), {"replaces": ""})
+        p2.refresh_from_db()
+        self.assertIsNone(p2.supersedes)
+        self.assertEqual(self.project.current_drawings().count(), 2)
+        # and links it back by hand
+        self.client.post(reverse("set_revision", args=[p2.pk]), {"replaces": str(p1.pk)})
+        p2.refresh_from_db()
+        self.assertEqual(p2.supersedes, p1)
+        self.assertEqual(p2.revision_link, "manual")
+        self.assertEqual(p2.revision_diff["carried_checks"], 1)
+
+    def test_named_like_a_revision_but_a_different_drawing(self):
+        from premeasure_engine.revisions import RevisionDiff
+
+        p1 = self.upload("Plan rev A.pdf")
+        with mock.patch("premeasure_engine.revisions.compare_revisions", return_value=RevisionDiff()):
+            p2 = self.upload("Plan rev B.pdf")
+        self.assertIsNone(p2.supersedes)
+        self.assertEqual(p2.revision_diff["rejected"], p1.title)
+        texts = [t.text for t in tender_todo(self.project)]
+        self.assertTrue(any("named like a new revision" in t for t in texts), texts)

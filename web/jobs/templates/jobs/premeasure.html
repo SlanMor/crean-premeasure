@@ -9,6 +9,9 @@
   · {% include "jobs/_status.html" %}
 </p>
 
+{% if not pm.is_current %}<div class="note"><b>Replaced by a later revision:</b> <a href="{% url 'premeasure' pm.superseded_by.pk %}">{{ pm.superseded_by.title }}</a>. This one is kept for the record and left out of the tender's lists and quantities.</div>{% endif %}
+{% if pm.supersedes and pm.revision_diff.counts %}<div class="note">Replaces <a href="{% url 'premeasure' pm.supersedes.pk %}">{{ pm.supersedes.title }}</a>. <a href="{% url 'changes' pm.pk %}">See what changed</a>.</div>{% endif %}
+{% if pm.revision_diff.rejected %}<div class="note">Named like a new revision of {{ pm.revision_diff.rejected }}, but most of its rooms differ, so it was not linked. If it does replace it, link it below.</div>{% endif %}
 {% if form %}
 <div class="nextbar"><div class="text">
   {% if unmapped %}<b>Next: choose products</b> for {{ unmapped|length }} finish{{ unmapped|length|pluralize:"es" }} with none, below.
@@ -154,6 +157,18 @@
     {% endfor %}
   </table>
 </div>
+
+{% if pm.is_current %}
+<div class="card" id="revision">
+  <form method="post" action="{% url 'set_revision' pm.pk %}" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">{% csrf_token %}
+    <div class="field" style="margin:0;flex:1;min-width:260px"><label for="id_replaces">This drawing is a new revision of</label>
+      <select name="replaces" id="id_replaces"><option value="">No other drawing</option>
+      {% for d in project.current_drawings %}{% if d.pk != pm.pk %}<option value="{{ d.pk }}"{% if pm.supersedes_id == d.pk %} selected{% endif %}>{{ d.title }}</option>{% endif %}{% endfor %}</select>
+      <div class="help">Found by the drawing's name when it is uploaded. Linking keeps the checks on unchanged rooms and shows what changed.</div></div>
+    <button class="btn secondary">Save</button>
+  </form>
+</div>
+{% endif %}
 
 {% if pm.summary.unknown_fills %}
 <div class="card">

@@ -146,7 +146,7 @@ def _wizard_drawings(request, project):
 def _wizard_products(request, project):
     """Step 4: one table for the whole tender. Codes from every legend read so far,
     with a product suggested where one clearly matches."""
-    drawings = list(project.premeasures.all())
+    drawings = list(project.current_drawings().all())
     busy = [d for d in drawings if d.busy]
     if request.method == "GET":
         for d in drawings:
@@ -254,7 +254,7 @@ def todo_status(request, pk: int):
 def check_tender(request, pk: int):
     """Start checking rooms on the first drawing that has some left."""
     project = get_object_or_404(Project, pk=pk)
-    for d in project.premeasures.exclude(summary=None).order_by("created_at"):
+    for d in project.current_drawings().exclude(summary=None).order_by("created_at"):
         if not d.busy and rooms_to_check(d):
             return redirect("check", pk=d.pk)
     messages.success(request, "No rooms left to check.")
@@ -299,7 +299,7 @@ def check(request, pk: int):
     done = checks_for(pm)
     nxt = None
     if room is None:
-        for d in pm.project.premeasures.exclude(summary=None).exclude(pk=pm.pk).order_by("created_at"):
+        for d in pm.project.current_drawings().exclude(summary=None).exclude(pk=pm.pk).order_by("created_at"):
             if not d.busy and rooms_to_check(d):
                 nxt = d
                 break
@@ -451,3 +451,53 @@ def accuracy_page(request):
     return render(request, "jobs/accuracy.html", {
         "jobs": jobs, "all": accuracy(jobs), "exports": accuracy(exports), "scans": accuracy(scans),
     })
+
+
+# --- revisions ----------------------------------------------------------------------
+
+
+@login_required
+def changes(request, pk: int):
+    """What changed between a drawing and the revision it replaces."""
+    pm = get_object_or_404(Premeasure.objects.select_related("project", "supersedes"), pk=pk)
+    if not (pm.supersedes and pm.revision_diff and pm.revision_diff.get("rooms") is not None):
+        return redirect("premeasure", pk=pk)
+    back = pm.supersedes.checked_jobs.filter(current=True).first()
+    diff = pm.revision_diff
+    counts = {k.replace(" ", "_"): v for k, v in diff["counts"].items()}
+    changed = [r for r in diff["rooms"] if r["state"] != "unchanged"]
+    return render(request, "jobs/changes.html", {
+        "pm": pm, "project": pm.project, "old": pm.supersedes, "diff": diff, "back": back, "counts": counts,
+        "changed": changed, "n_changed": len(changed), "to_check": len(rooms_to_check(pm)),
+        "by_finish": [f for f in diff["by_finish"] if abs(f["change"]) >= 0.01],
+    })
+
+
+@login_required
+def changes_image(request, pk: int):
+    from .views import _serve
+
+    pm = get_object_or_404(Premeasure, pk=pk)
+    return _serve(pm.changes)
+
+
+@login_required
+@require_POST
+def set_revision(request, pk: int):
+    """The estimator says which drawing this one replaces, or that it replaces none."""
+    from .revisions import link
+
+    pm = get_object_or_404(Premeasure, pk=pk)
+    old = None
+    choice = request.POST.get("replaces", "")
+    if choice.isdigit():
+        old = pm.project.current_drawings().exclude(pk=pm.pk).filter(pk=int(choice)).first()
+    if pm.busy:
+        messages.error(request, "Wait until the drawing has been read.")
+    else:
+        link(pm, old)
+        if old:
+            messages.success(request, f"Linked: this drawing replaces {old.title}.")
+        else:
+            messages.success(request, "This drawing replaces no other.")
+    return redirect("changes" if old and pm.revision_diff else "premeasure", pk=pk)

@@ -65,6 +65,10 @@ class Project(models.Model):
     class Meta:
         ordering = ["-created_at"]
 
+    def current_drawings(self):
+        """The tender's drawings, without those replaced by a later revision."""
+        return self.premeasures.filter(superseded_by__isnull=True)
+
     def project_products(self):
         """This project's products: its shortlist and every product given to a finish code."""
         ids = set(self.shortlist.values_list("id", flat=True))
@@ -316,6 +320,12 @@ class Premeasure(models.Model):
     error = models.TextField(blank=True)
     created_by = models.ForeignKey("auth.User", on_delete=models.SET_NULL, null=True, blank=True)
     batch = models.ForeignKey("Batch", on_delete=models.SET_NULL, null=True, blank=True, related_name="premeasures")
+    # an earlier revision of the same drawing, which this one replaces
+    supersedes = models.OneToOneField("self", on_delete=models.SET_NULL, null=True, blank=True,
+                                      related_name="superseded_by")
+    revision_link = models.CharField(max_length=10, blank=True, help_text="auto (by name) or manual")
+    revision_diff = models.JSONField(null=True, blank=True)
+    changes = models.FileField(upload_to="premeasure/changes/", blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -324,6 +334,14 @@ class Premeasure(models.Model):
 
     def __str__(self) -> str:
         return f"{self.project.code} {self.title}"
+
+    @property
+    def is_current(self) -> bool:
+        """Not replaced by a later revision."""
+        try:
+            return self.superseded_by is None
+        except Premeasure.DoesNotExist:
+            return True
 
     @property
     def busy(self) -> bool:

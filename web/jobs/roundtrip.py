@@ -129,4 +129,4 @@ def accuracy(jobs: list[CheckedJob]) -> dict:
 def not_back(project: Project) -> list[Premeasure]:
     """Drawings written to Callidus with no checked job uploaded yet."""
     back = set(project.checked_jobs.exclude(premeasure=None).values_list("premeasure_id", flat=True))
-    return [d for d in project.premeasures.filter(status=Premeasure.Status.DONE) if d.pk not in back]
+    return [d for d in project.current_drawings().filter(status=Premeasure.Status.DONE) if d.pk not in back]

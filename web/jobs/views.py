@@ -72,7 +72,8 @@ def project(request, pk: int):
 
     project = get_object_or_404(Project.objects.select_related("client", "main_contractor", "architect"), pk=pk)
     rows = list(project.products.select_related("library"))
-    drawings = list(project.premeasures.prefetch_related("checks"))
+    drawings = list(project.current_drawings().select_related("supersedes").prefetch_related("checks"))
+    earlier = list(project.premeasures.filter(superseded_by__isnull=False).select_related("superseded_by"))
     todo = tender_todo(project, request.user)
     return render(
         request,
@@ -88,6 +89,7 @@ def project(request, pk: int):
             "todo": [t for t in todo if t.level != "info"],
             "more": [t for t in todo if t.level == "info"],
             "busy": any(d.busy for d in drawings),
+            "earlier": earlier,
         },
     )
 
@@ -131,7 +133,7 @@ def setup(request, pk: int):
             "shortlist_form": shortlist,
             "shortlist": project.shortlist.filter(active=True),
             "job": base_job(project),
-            "drawings": project.premeasures.exclude(summary=None),
+            "drawings": project.current_drawings().exclude(summary=None),
             "starter_form": StarterForm(),
             "next": request.GET.get("next", ""),
         },
@@ -277,21 +279,29 @@ def start_drawings(project: Project, form: UploadDrawingsForm, user, auto_write:
                                  notify=d["notify"], files_pending=len(multi))
     # create every single-page drawing before any work starts, so the batch is never
     # seen as finished while some of it is still to come
+    from .revisions import prior_revision, split_revision
+
     single, todo = None, []
-    for f in d["drawings"]:
+    # oldest revision first, so a later one in the same upload replaces an earlier one
+    from .tender import natural
+
+    for f in sorted(d["drawings"], key=lambda f: natural(split_revision(f.name)[1])):
+        name, rev = split_revision(f.name)
         upload = Upload.objects.create(
             project=project, kind=Upload.Kind.DRAWING, file=f,
-            drawing_number=Path(f.name).stem[:100], revision=d["revision"],
+            drawing_number=name[:100], revision=d["revision"] or rev,
         )
         if f in multi:
             todo.append(("jobs.tasks.split_pdf", upload.pk, batch.pk, d["level"], d.get("scale"), d.get("sheet") or ""))
             continue
         level = d["level"] if len(d["drawings"]) == 1 else ""
         title = " ".join(x for x in (project.code, level or Path(f.name).stem[:40]) if x)
+        prior = prior_revision(project, f.name, 1)
         pm = Premeasure.objects.create(
             project=project, level=d["level"], title=safe_name(title), drawing=upload, page=1,
             starter=job.upload if job else None, created_by=user, batch=batch, status=Premeasure.Status.QUEUED,
             scale=d.get("scale"), sheet=d.get("sheet") or "",
+            supersedes=prior, revision_link="auto" if prior else "",
         )
         single = pm if len(d["drawings"]) == 1 and not multi else None
         todo.append(("jobs.tasks.analyse_premeasure", pm.pk))
