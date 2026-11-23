@@ -80,3 +80,29 @@ def test_premeasure_against_creans_own_cashel_measure(tmp_path):
     c = compare_jobs(read_est(out.est), read_est(est))
     assert c.outline_agreement > 0.97
     assert c.area_ours < c.area_final * 1.06  # little floor measured that Crean left out
+
+
+def test_cashel_p3_shared_colours_are_measured_and_flagged(tmp_path):
+    """P3 gives two pairs of finishes the same colour (Rosemary Green and Silver
+    Shadow, each in 2.5 mm and 3.5 mm acoustic). Their rooms used to be dropped
+    as 'not in the legend', some 650 m2. They are now measured under a combined
+    code, flagged for the estimator, and never given one of the pair's products."""
+    from premeasure_engine.premeasure import analyse, write_outputs
+
+    folder = Path(ROOT) / "cashel"
+    est, cb = next(folder.glob("*.est")), next(folder.glob("*.CalBack"))
+    a = analyse(folder / "finishes-P3.pdf", est)
+    shared = {f.code: f for f in a.finishes if " or " in f.code}
+    assert set(shared) == {"FF7 or FF11", "FF8 or FF10"}
+    assert sum(f.amount for f in shared.values()) > 600
+    for r in a.rooms:
+        if r.finish is not None and " or " in r.finish.code:
+            assert r.status != "Verified" and any("same colour" in why for why in r.reasons)
+    assert not ({"FF7", "FF8", "FF10", "FF11"} & {r.finish.code for r in a.rooms if r.finish})
+    # with a product for every finish, the outlines hold nearly all of Crean's floor
+    any_product = next(m.name for m in read_est(est).materials if m.name != "NONE")
+    out = write_outputs(a, est, cb, {f.code: any_product for f in a.finishes if f.kind == "floor"}, {},
+                        tmp_path, "P3")
+    c = compare_jobs(read_est(out.est), read_est(est))
+    assert c.outline_agreement > 0.97
+    assert c.area_ours < c.area_final * 1.06
