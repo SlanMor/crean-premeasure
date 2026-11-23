@@ -31,7 +31,17 @@ def _px(m: float) -> int:
     return round(m * 1000 / SCALE / 25.4 * DPI)
 
 
-def _sheet(tmp_path, title=True, page_mm=None) -> Path:
+def _hatch(d, box, colour, step=10):
+    """Colour crossed by black diagonal lines, as hatched finishes are drawn."""
+    x0, y0, x1, y1 = box
+    d.rectangle(box, fill=colour)
+    for k in range(-(y1 - y0), x1 - x0, step):
+        a = (x0 + max(k, 0), y0 + max(-k, 0))
+        b = (x0 + min(k + (y1 - y0), x1 - x0), y0 + min(x1 - x0 - k, y1 - y0))
+        d.line([a, b], fill=(0, 0, 0), width=1)
+
+
+def _sheet(tmp_path, title=True, page_mm=None, plan_colours=None, hatched=False) -> Path:
     """An A3 finishes plan at 1:100 as a picture-only PDF: two rooms (8 x 6 m and
     5 x 4 m) in their finish colours with 200 mm walls, a third finish in a
     3 x 3 m room, the legend, and a title block."""
@@ -47,11 +57,19 @@ def _sheet(tmp_path, title=True, page_mm=None) -> Path:
     for x, y, rw, rh, c in rooms:
         d.rectangle([x - wall, y - wall, x + _px(rw) + wall - 1, y + _px(rh) + wall - 1], fill=(40, 40, 40))
     for x, y, rw, rh, c in rooms:
-        d.rectangle([x, y, x + _px(rw) - 1, y + _px(rh) - 1], fill=COLOURS[c])
+        box = [x, y, x + _px(rw) - 1, y + _px(rh) - 1]
+        if hatched and c == 2:
+            _hatch(d, box, COLOURS[c])
+        else:
+            d.rectangle(box, fill=(plan_colours or COLOURS)[c])
     lx, ly = round(w * 0.55), _px(2)
     for i, (c, text) in enumerate(zip(COLOURS, ["CARPET TILES", "SAFETY VINYL", "LINOLEUM SHEET"])):
         y = ly + i * 70
-        d.rectangle([lx, y, lx + 40, y + 40], fill=c, outline=(0, 0, 0), width=2)
+        if hatched and i == 2:
+            _hatch(d, [lx, y, lx + 40, y + 40], c)
+            d.rectangle([lx, y, lx + 40, y + 40], outline=(0, 0, 0), width=2)
+        else:
+            d.rectangle([lx, y, lx + 40, y + 40], fill=c, outline=(0, 0, 0), width=2)
         d.text((lx + 55, y + 8), f"FLOOR FINISH TYPE {i + 1}: {text}", fill="black", font=font)
     if title:
         tx = round(w * 0.84)
@@ -112,6 +130,31 @@ def test_pipeline_takes_a_picture(tmp_path):
 
     im = Image.open(png)
     assert abs(im.width / im.height - 420 / 297) < 0.01
+
+
+def test_hatched_finish(tmp_path):
+    """A finish drawn as colour crossed by black lines, in the legend and on the plan."""
+    needs_ocr()
+    r = P.read_picture(_sheet(tmp_path, hatched=True))
+    ff3 = [room.area for room in r.rooms if room.finish.code == "FF3"]
+    assert len(ff3) == 1 and abs(ff3[0] / 9.0 - 1) < 0.03, ff3
+
+
+def test_plan_colours_not_in_the_legend(tmp_path):
+    """Nothing on the plan in the legend's colours: no rooms, no failure, and the
+    coloured floor reported for the estimator."""
+    needs_ocr()
+    r = P.read_picture(_sheet(tmp_path, plan_colours=[(90, 160, 90), (90, 90, 170), (170, 90, 90)]))
+    assert r.rooms == []
+    assert sum(r.report["unknown_fills"].values()) > 60
+
+
+def test_finishes_sharing_a_colour_are_flagged():
+    from premeasure_engine.drawing.legend import Legend, LegendEntry
+
+    entries = [LegendEntry("floor", i + 1, "", t, c, []) for i, (t, c) in
+               enumerate([("tile", (245, 200, 225)), ("tile hatched", (246, 201, 224)), ("vinyl", (90, 160, 90))])]
+    assert P.colour_twins(Legend(entries, None)) == [{"FF1", "FF2"}]
 
 
 def test_room_tag_patterns():

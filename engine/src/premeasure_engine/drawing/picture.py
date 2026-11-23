@@ -192,24 +192,34 @@ def find_swatches(rgb: np.ndarray, px_per_mm: float):
         found.append((x, y, x + w - 1, y + h - 1, mask))
     # swatches with no outline, or one too faint to close (filled circles, soft boxes):
     # compact patches of one colour
-    solid = ((rgb.min(axis=2) < 240) & (rgb.max(axis=2) >= 130)).astype(np.uint8)
-    solid = cv2.morphologyEx(solid, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))  # cut thin table lines away
-    n, comp, stats, _ = cv2.connectedComponentsWithStats(solid, connectivity=4)
-    for j in range(1, n):
-        x, y, w, h, a = stats[j]
-        if not (lo <= w <= hi and lo <= h <= hi and 0.4 <= w / h <= 2.5) or a < 0.7 * w * h:
-            continue
-        if any(f[0] - 3 <= x <= f[2] and f[1] - 3 <= y <= f[3] for f in found):
-            continue  # already found by its outline
-        mask = (comp[y : y + h, x : x + w] == j).astype(np.uint8)
-        mask = cv2.erode(mask, np.ones((3, 3), np.uint8), iterations=2)  # off the soft rim
-        px = rgb[y : y + h, x : x + w][mask.astype(bool)].astype(int)
-        if len(px) < 10:
-            continue
-        near = np.abs(px - np.median(px, 0)).max(1) <= 30
-        if near.mean() < 0.75:
-            continue  # not one colour (a code written inside the swatch takes up to a fifth)
-        found.append((x, y, x + w - 1, y + h - 1, mask))
+    colour = ((rgb.min(axis=2) < 240) & (rgb.max(axis=2) >= 130)).astype(np.uint8)
+    solid = cv2.morphologyEx(colour, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))  # cut thin table lines away
+    # a hatched swatch (colour crossed by black lines) only holds together once the lines are bridged
+    hatched = cv2.morphologyEx(solid, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
+    for pass_mask, bridged in ((solid, False), (hatched, True)):
+        n, comp, stats, _ = cv2.connectedComponentsWithStats(pass_mask, connectivity=4)
+        for j in range(1, n):
+            x, y, w, h, a = stats[j]
+            if not (lo <= w <= hi and lo <= h <= hi and 0.4 <= w / h <= 2.5) or a < 0.7 * w * h:
+                continue
+            if any(f[0] - 3 <= x <= f[2] and f[1] - 3 <= y <= f[3] for f in found):
+                continue  # already found
+            mask = (comp[y : y + h, x : x + w] == j).astype(np.uint8)
+            mask = cv2.erode(mask, np.ones((3, 3), np.uint8), iterations=2)  # off the soft rim
+            if bridged:  # only the coloured pixels, not the hatching
+                mask &= colour[y : y + h, x : x + w]
+                if mask.sum() < 0.5 * w * h:
+                    continue
+            px = rgb[y : y + h, x : x + w][mask.astype(bool)].astype(int)
+            if len(px) < 10:
+                continue
+            mid = np.median(px, 0)
+            near = np.abs(px - mid).max(1) <= 30
+            if near.mean() < 0.75:
+                continue  # not one colour (a code written inside the swatch takes up to a fifth)
+            if bridged and mid.max() - mid.min() < 20:
+                continue  # black hatching on white or grey reads as grey: not a colour to match the plan by
+            found.append((x, y, x + w - 1, y + h - 1, mask))
     # keep shapes stacked in a column with at least two others of about the same size
     keep = []
     for f in found:
@@ -434,13 +444,15 @@ def building_angle(mask: np.ndarray) -> float:
 
     edges = cv2.Canny(mask.astype(np.uint8) * 255, 50, 150)
     lines = cv2.HoughLinesP(edges, 1, math.pi / 720, 80, minLineLength=60, maxLineGap=3)
-    if lines is None:
+    if lines is None or len(lines) == 0:
         return 0.0
     hist: dict[int, float] = {}
     for x0, y0, x1, y1 in np.asarray(lines).reshape(-1, 4):
         a = math.degrees(math.atan2(y1 - y0, x1 - x0)) % 90
         key = int(round(a * 4)) % 360
         hist[key] = hist.get(key, 0) + math.hypot(x1 - x0, y1 - y0)
+    if not hist:
+        return 0.0
     best = max(hist, key=hist.get) / 4
     if best > 45:
         best -= 90  # turn the short way: -45 to 45 degrees
@@ -743,6 +755,26 @@ def _measure(img, sheet: str, scale: float, min_opening: float):
     return m, shape_note, legend, rooms, report
 
 
+def colour_twins(legend: Legend, within: float = 6.0) -> list[set[str]]:
+    """Floor finishes the legend draws in (nearly) the same colour, often one of
+    them hatched: their areas cannot be told apart in a picture."""
+    floors = legend.floors()
+    if len(floors) < 2:
+        return []
+    labs = _lab(np.array([[e.fill for e in floors]], np.uint8))[0]
+    groups: list[set[str]] = []
+    for i in range(len(floors)):
+        for j in range(i + 1, len(floors)):
+            if float(np.sqrt(((labs[i] - labs[j]) ** 2).sum())) <= within:
+                a, b = floors[i].code, floors[j].code
+                g = next((g for g in groups if a in g or b in g), None)
+                if g is None:
+                    groups.append({a, b})
+                else:
+                    g.update((a, b))
+    return groups
+
+
 def _unclear_codes(legend: Legend) -> list[str]:
     """Codes that do not follow the pattern most of the legend's codes follow
     (F1-A, F1-B ... and then P22): most likely misread."""
@@ -821,6 +853,14 @@ def read_picture(pdf: str | Path, page: int = 0, sheet: str | None = None, scale
     report["sheet"] = sheet
     report["sources"] = source
     report["manual_finishes"] = list(getattr(legend, "unread", []))
+    twins = colour_twins(legend)
+    report["colour_twins"] = [sorted(g) for g in twins]
+    for r in rooms:
+        for g in twins:
+            if r.finish is not None and r.finish.code in g:
+                others = ", ".join(sorted(c for c in g if c != r.finish.code))
+                r.flag(f"the legend gives {others} the same colour as {r.finish.code} (one may be hatched), and a "
+                       "picture cannot tell them apart: check which it is")
     unclear = _unclear_codes(legend)
     report["unclear_codes"] = unclear
     for r in rooms:

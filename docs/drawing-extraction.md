@@ -75,3 +75,13 @@ Cashel draws its fills under the heavy wall lines, so a picture of it reads a li
 ## Against Crean's own measure, 23 November 2026
 
 Crean's estimator measured Cashel P2 by hand in Callidus. Our pre-measure of the same drawing, written on the same background and compared room by room (`roundtrip.compare_jobs`): 98.6% of their floor lies inside our outlines. We measured 1,510 m2 against their 1,463 m2; the difference is floor we included that they left out (about 67 m2). Many rooms are split differently (they split circulation into design areas, for example), so room-by-room pairing understates the agreement; the floor agreement is the fairer figure. Real tenders uploaded back from Callidus now give this figure for every drawing (Settings, Accuracy on real tenders).
+
+## Scans: hatched swatches and shared colours, 23 November 2026
+
+UCD 4th floor part B (West Building) failed with "max() iterable argument is empty": none of the legend's swatches matched the plan, so there was no floor to find the building's angle from. Fixed in three parts:
+
+- Nothing matching the legend is no longer an error: the drawing reads with no rooms, says so on its page, and lists the coloured areas found as not in the legend.
+- Hatched legend swatches (a colour crossed by black lines, such as RFS-215 hot melt membrane in orange) are now found: the lines are bridged before the swatch is measured, and only the coloured pixels set its colour. Black hatching on white (which reads as grey) is not taken as a colour.
+- Where the legend gives two finishes the same colour (often one plain and one hatched, such as FL-702 and FL-703 at UCD), a picture cannot tell their areas apart, so every room in that colour is marked to check and the drawing page says which finishes share it.
+
+On that drawing: the plant floor in RFS-215 (634 m2, 3 areas) is measured; about 890 m2 of grey-green (the roof areas, not in the legend) is listed as not in the legend. The other scans' legends are unchanged except for the hatched swatches now found (UCD first floor part B gains FL-703 and RFS-215).

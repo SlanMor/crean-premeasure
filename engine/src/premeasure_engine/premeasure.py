@@ -227,6 +227,7 @@ def _picture_summary(a: Analysis) -> dict | None:
         "printed_areas": dict(pa, off=None if pa.get("ratio") is None else round(abs(pa["ratio"] - 1) * 100, 1)),
         "agrees": pa.get("ratio") is not None and abs(pa["ratio"] - 1) <= AREA_CHECK,
         "unclear_codes": rep.get("unclear_codes", []),
+        "colour_twins": rep.get("colour_twins", []),
         "shape_note": rep.get("shape_note"),
     }
 
