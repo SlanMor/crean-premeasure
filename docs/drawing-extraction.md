@@ -85,3 +85,14 @@ UCD 4th floor part B (West Building) failed with "max() iterable argument is emp
 - Where the legend gives two finishes the same colour (often one plain and one hatched, such as FL-702 and FL-703 at UCD), a picture cannot tell their areas apart, so every room in that colour is marked to check and the drawing page says which finishes share it.
 
 On that drawing: the plant floor in RFS-215 (634 m2, 3 areas) is measured; about 890 m2 of grey-green (the roof areas, not in the legend) is listed as not in the legend. The other scans' legends are unchanged except for the hatched swatches now found (UCD first floor part B gains FL-703 and RFS-215).
+
+## Cashel P3 against Crean's own measure, 23 November 2026
+
+P3 gives two pairs of finishes exactly the same colour: Rosemary Green (FF7, 3.5 mm acoustic, and FF11, 2.5 mm) and Silver Shadow (FF8 and FF10, the same split). The plan cannot tell the pair apart. Those rooms used to be set aside as "not in the legend", about 650 m2. They are now measured under a combined code ("FF7 or FF11"), every room is flagged, and neither product is picked by the software: the estimator chooses, usually from the main contractor's finishes schedule. Crean prices from that schedule, room by room.
+
+Against Crean's checked Callidus job for Cashel:
+
+- 98.0% of Crean's floor lies inside our P3 outlines. We measure 1,510 m2 against their 1,463 m2 (3% more).
+- Settling the shared colours by room number from the schedule gives every room its right product: 684 m2 settled, no product differences left.
+- Most of the 3% is wet rooms (WCs, showers, sluice: 11 to 22% larger than Crean's on 4 to 7 m2 rooms) and some classrooms (5 to 8%). Fitted units are the likely reason: Crean measures 100 mm in from the kick board, a rule not yet applied.
+- Corridors are split differently (Crean splits at the feature colour areas), which the comparison counts as "split or joined", not as an error. Crean adds matwells and stair landings by hand.

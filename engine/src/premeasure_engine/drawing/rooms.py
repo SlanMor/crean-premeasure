@@ -179,7 +179,7 @@ def _classify_colour(col: Colour, g, legend: Legend, hatch: _Hatch) -> tuple[Leg
     if len(exact) == 1:
         return exact[0], "legend fill"
     if len(exact) > 1:
-        return None, f"fill {col} is used by more than one legend finish: " + ", ".join(e.code for e in exact)
+        return shared_colour(exact), "shared colour"
     close = [e for e in floors if e.fill and e.fill != WHITE and sum((a - b) ** 2 for a, b in zip(e.fill, col)) <= 36]
     if len(close) == 1:
         return close[0], "legend fill"
@@ -200,6 +200,28 @@ def _classify_colour(col: Colour, g, legend: Legend, hatch: _Hatch) -> tuple[Leg
             others = ", ".join(e.code for e in match if e is not best)
             return best, f"legend hatch shared with {others}; chosen by nearest fill colour"
     return None, "colour not in legend"
+
+
+_SHARED: dict[tuple[str, ...], LegendEntry] = {}
+
+
+def shared_colour(entries: list[LegendEntry]) -> LegendEntry:
+    """One finish standing for several the legend draws in exactly the same
+    colour (Cashel P3: Rosemary Green in 2.5 mm and in 3.5 mm acoustic). The
+    plan cannot tell them apart, so the rooms are measured under a combined
+    code ("FF7 or FF11") and flagged; the product is the estimator's call,
+    usually from the finishes schedule. Never folded into one of them."""
+    codes = tuple(sorted({e.code for e in entries}, key=lambda c: (len(c), c)))
+    key = codes + (str(entries[0].fill),)
+    if key not in _SHARED:
+        first = min(entries, key=lambda e: e.number)
+        _SHARED[key] = LegendEntry(
+            kind="floor", number=first.number, heading=" or ".join(codes),
+            description=(f"{' or '.join(codes)}: the legend gives these the same colour, so the plan cannot tell "
+                         "them apart. Check each room against the finishes schedule. "
+                         + " | ".join(f"{e.code}: {e.description}" for e in entries)),
+            fill=first.fill, hatch=list(first.hatch), custom_code=" or ".join(codes))
+    return _SHARED[key]
 
 
 def _code_shape(code: str) -> str:
@@ -299,6 +321,11 @@ def find_rooms(
             r = Room(p, entry, "fill", col)
             if why == "tagged":
                 r.flag(f"finish {entry.code} is written in the room but is not in the legend; check the product")
+            elif why == "shared colour":
+                r.flag(f"the legend gives {entry.code} the same colour, so the plan cannot say which this room is: "
+                       "check it against the finishes schedule")
+                report.setdefault("shared_colours", {})[entry.code] = round(
+                    report.get("shared_colours", {}).get(entry.code, 0) + p.area, 2)
             elif why != "legend fill":
                 r.flag(f"finish matched by its hatch ({why}); the fill colour {col} differs from the legend")
             rooms.append(r)
