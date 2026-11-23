@@ -126,6 +126,14 @@ def analyse_premeasure(pk: int) -> None:
         from .tender import zoom_page_path
 
         zoom_page_path(pm).unlink(missing_ok=True)
+        if pm.supersedes_id:
+            from .revisions import compare
+
+            try:
+                compare(pm)  # what changed since the last revision; unchanged rooms keep their checks
+            except Exception as exc:  # the drawing itself was read: never fail it over the comparison
+                pm.revision_diff = {"error": f"{type(exc).__name__}: {exc}"}
+                pm.save(update_fields=["revision_diff", "updated_at"])
     except Exception as exc:
         _fail(pm, exc)
         _batch_progress(pm)
@@ -154,15 +162,19 @@ def split_pdf(upload_id: int, batch_id: int, level: str, scale: int | None = Non
         pages = plan_pages(upload.file.path) or list(range(pdf_pages(upload.file.path)))
     except Exception:
         pages = [0]  # unreadable text: try the first page and let the reading report the problem
+    from .revisions import prior_revision
+
     stem = Path(upload.filename).stem
-    made = [
-        Premeasure.objects.create(
+    made = []
+    for p in pages:
+        prior = prior_revision(batch.project, upload.drawing_number or upload.filename, p + 1,
+                               exclude=[m.pk for m in made] + list(upload.premeasures.values_list("pk", flat=True)))
+        made.append(Premeasure.objects.create(
             project=batch.project, level=level, title=safe_name(f"{batch.project.code} {stem[:40]} p{p + 1}"),
             drawing=upload, page=p + 1, starter=_starter(batch.project), created_by=batch.created_by,
             batch=batch, status=Premeasure.Status.QUEUED, scale=scale, sheet=sheet,
-        )
-        for p in pages
-    ]
+            supersedes=prior, revision_link="auto" if prior else "",
+        ))
     Batch.objects.filter(pk=batch.pk).update(files_pending=F("files_pending") - 1)
     for pm in made:
         enqueue("jobs.tasks.analyse_premeasure", pm.pk)

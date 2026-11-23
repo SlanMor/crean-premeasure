@@ -20,7 +20,7 @@
   <table>
     <tr><th>Name</th><th>Level</th><th>Drawing</th><th>Status</th><th class="num">Rooms to check</th><th>Added</th></tr>
     {% for pm, n_check in premeasures %}
-    <tr><td><a href="{% url 'premeasure' pm.pk %}">{{ pm.title }}</a></td><td>{{ pm.level }}</td>
+    <tr><td><a href="{% url 'premeasure' pm.pk %}">{{ pm.title }}</a>{% if pm.supersedes and pm.revision_diff.counts %} <a class="pill off" href="{% url 'changes' pm.pk %}">new revision</a>{% endif %}</td><td>{{ pm.level }}</td>
         <td class="muted">{{ pm.drawing.drawing_number }}{% if pm.page > 1 %} p{{ pm.page }}{% endif %}{% if pm.drawing.revision %} rev {{ pm.drawing.revision }}{% endif %}</td>
         <td>{% include "jobs/_status.html" %}</td>
         <td class="num">{% if n_check %}<a href="{% url 'check' pm.pk %}">{{ n_check }}</a>{% endif %}</td>
@@ -28,6 +28,8 @@
     {% endfor %}
   </table>
   {% else %}<p class="muted">No drawings yet.</p>{% endif %}
+  {% if earlier %}<details style="margin-top:12px"><summary class="muted">{{ earlier|length }} earlier revision{{ earlier|length|pluralize }}, replaced</summary>
+  <table>{% for d in earlier %}<tr><td><a href="{% url 'premeasure' d.pk %}">{{ d.title }}</a></td><td class="muted">replaced by {{ d.superseded_by.title }}</td></tr>{% endfor %}</table></details>{% endif %}
 </div>
 
 <div class="card">

@@ -30,8 +30,12 @@ def rooms_to_check(pm: Premeasure, floors: dict | None = None) -> list[dict]:
         return []
     if floors is None:
         floors, _ = drawing_mapping(pm)
+    from .revisions import changed_rooms
+
     done = checks_for(pm)
-    flagged = [r for r in pm.summary["rooms"] if r["status"] != "Verified" and r["id"] not in done]
+    changed = changed_rooms(pm)  # new or different since the last revision: worth a look
+    flagged = [r for r in pm.summary["rooms"]
+               if (r["status"] != "Verified" or r["id"] in changed) and r["id"] not in done]
     priced = [r for r in flagged if r["finish"] in floors]
     todo = priced if floors else flagged
     return sorted(todo, key=lambda r: -r["area_m2"])
@@ -71,7 +75,7 @@ class Todo:
 def tender_todo(project: Project, user=None) -> list[Todo]:
     """What is left before the tender's quantities are ready, in the order to do it."""
     items: list[Todo] = []
-    drawings = list(project.premeasures.select_related("drawing").prefetch_related("checks"))
+    drawings = list(project.current_drawings().select_related("drawing").prefetch_related("checks"))
     if house_job() is None and not project.uploads.filter(kind="est").exists():
         staff = bool(user and user.is_staff)
         items.append(Todo("There is no Callidus job to build the files on yet.",
@@ -98,6 +102,23 @@ def tender_todo(project: Project, user=None) -> list[Todo]:
                                   reverse("premeasure", args=[d.pk]), "See why"))
             else:
                 items.append(Todo(f"{d.title}: something went wrong.", reverse("premeasure", args=[d.pk]), "Try again"))
+
+    for d in drawings:
+        diff = d.revision_diff or {}
+        if diff.get("rejected"):
+            items.append(Todo(f"{d.title} is named like a new revision of {diff['rejected']}, but most of its rooms "
+                              "differ, so it was not linked. Link it if it does replace it.",
+                              reverse("premeasure", args=[d.pk]) + "#revision", "Decide"))
+        elif d.supersedes_id and diff.get("counts"):
+            from .revisions import changed_rooms
+
+            removed = diff["counts"].get("removed", 0)
+            open_ = len(changed_rooms(d) - set(checks_for(d))) + (0 if d.status == Premeasure.Status.DONE else removed)
+            if open_:  # until the changed rooms are checked (and the removals seen, by writing it)
+                n = sum(v for k, v in diff["counts"].items() if k != "unchanged")
+                items.append(Todo(f"{d.title} replaces {d.supersedes.title}: {n} room{'s' if n != 1 else ''} changed"
+                                  f"{', the rest kept their checks' if diff.get('carried_checks') else ''}.",
+                                  reverse("changes", args=[d.pk]), "See the changes"))
 
     read = [d for d in drawings if d.summary and not d.busy]
     no_product = codes_without_product(project, read)
@@ -196,7 +217,7 @@ def _words(text: str) -> str:
 def codes_in_tender(project: Project) -> dict[str, CodeUse]:
     """Each finish code on the tender's drawings: what each legend says, where, and how much."""
     out: dict[str, CodeUse] = {}
-    for d in project.premeasures.exclude(summary=None):
+    for d in project.current_drawings().exclude(summary=None):
         for f in d.summary["finishes"]:
             use = out.setdefault(norm(f["code"]), CodeUse(f["code"], f["kind"], fill=f.get("fill")))
             text = (f.get("description") or "").strip()
@@ -244,7 +265,7 @@ class Query:
 def queries(project: Project) -> list[Query]:
     """What the drawings leave open, worded for the architect."""
     out: list[Query] = []
-    for d in project.premeasures.select_related("drawing"):
+    for d in project.current_drawings().select_related("drawing"):
         name = f"{d.drawing.drawing_number or d.title}" + (f" (page {d.page})" if d.page > 1 else "")
         if d.status == Premeasure.Status.FAILED and d.plain_error:
             if "no finish legend" in d.error:
@@ -316,7 +337,7 @@ def tender_workbook(project: Project) -> bytes:
     from openpyxl.styles import Font, PatternFill
     from openpyxl.utils import get_column_letter
 
-    drawings = [d for d in project.premeasures.select_related("drawing").prefetch_related("checks")
+    drawings = [d for d in project.current_drawings().select_related("drawing").prefetch_related("checks")
                 if d.summary and not d.busy]
     per_product: dict[str, dict] = {}
     rooms_rows, hand_rows = [], []
@@ -357,7 +378,7 @@ def tender_workbook(project: Project) -> bytes:
             if u["area_m2"] >= 5:
                 hand_rows.append([d.title, "", "", "", u["area_m2"],
                                   f"coloured area not in the legend (RGB {', '.join(map(str, u['colour']))})"])
-    for d in project.premeasures.exclude(pk__in=[x.pk for x in drawings]):
+    for d in project.current_drawings().exclude(pk__in=[x.pk for x in drawings]):
         hand_rows.append([d.title, "", "", "", None, f"drawing not measured: {d.get_status_display().lower()}"])
 
     wastage = wastage_for(project, list(per_product))
@@ -414,7 +435,7 @@ def write_ready(project: Project) -> list[Premeasure]:
     from .queue import enqueue
 
     queued = []
-    for d in project.premeasures.exclude(summary=None):
+    for d in project.current_drawings().exclude(summary=None):
         if d.busy:
             continue
         floors, skirtings = drawing_mapping(d)
