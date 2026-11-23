@@ -8,6 +8,7 @@
 <div class="card">
   <form method="post" action="{% url 'setup' project.pk %}{% if next %}?next={{ next|urlencode }}{% endif %}">{% csrf_token %}
     {{ formset.management_form }}
+    <button style="position:absolute;left:-9999px" tabindex="-1" aria-hidden="true">Save</button>{# Enter saves #}
     {% if formset.non_form_errors %}<div class="msg error">{{ formset.non_form_errors|join:" " }}</div>{% endif %}
     <table>
       <tr><th style="width:120px">Finish code</th><th>On the drawing's legend</th><th style="width:40%">Product</th><th class="num">Remove</th></tr>
@@ -17,18 +18,40 @@
         <td class="reasons">{{ f.instance.description|default:""|truncatechars:120 }}</td>
         <td>{{ f.library }}{{ f.library.errors }}
           {% if f.instance.pk and not f.instance.library_id %}
-          <div class="help"><a href="{% url 'product_new' %}?row={{ f.instance.pk }}&type={% if f.instance.kind == "skirting" %}skirting{% else %}sheet{% endif %}&name={{ f.instance.finish_code|urlencode }}%20-%20{{ f.instance.description|truncatechars:80|urlencode }}&next={{ request.get_full_path|urlencode }}">Not in the list? Add a new product</a></div>
+          <div class="help">Not in the list? <button class="linklike" name="new_for" value="{{ f.instance.pk }}">Add a new product</button> (what you have chosen on this page is saved first)</div>
           {% elif f.instance.library %}<div class="help">{{ f.instance.library.get_type_display }}{% if f.instance.library.size %}, {{ f.instance.library.size }}{% endif %}{% if f.instance.library.wastage_pct is not None %}, {{ f.instance.library.wastage_pct }}% wastage{% endif %} · <a href="{% url 'product_edit' f.instance.library.pk %}?next={{ request.get_full_path|urlencode }}">edit</a></div>{% endif %}
         </td>
         <td class="num">{% if f.instance.pk %}{{ f.DELETE }}{% endif %}</td>
       </tr>
       {% endfor %}
     </table>
-    <p style="margin-top:16px"><button class="btn">Save</button>
-    {% if next %}<a class="btn secondary" href="{{ next }}" style="margin-left:8px">Back to the drawing</a>{% endif %}
-    <a href="{% url 'product_new' %}?next={{ request.get_full_path|urlencode }}" style="margin-left:12px">Add a product to the list</a></p>
+
+    <h2 style="margin-top:28px">This project's products</h2>
+    <p class="muted">The products this tender uses. They are listed first wherever a product is chosen, on this page and on every drawing. Products given to a finish code above are included automatically.</p>
+    {% if shortlist %}
+    <table>{% for p in shortlist %}<tr><td>{% if p.fill %}<span class="swatch" style="background:{{ p.fill }}"></span>{% endif %}</td><td>{{ p.name }}</td><td class="muted">{{ p.get_type_display }}</td>
+      <td class="num"><label class="check" style="font-weight:400"><input type="checkbox" name="drop" value="{{ p.pk }}">remove</label></td></tr>{% endfor %}</table>
+    {% endif %}
+    <div class="field" style="margin-top:12px">
+      <label for="id_s-add">Add products from the list</label>
+      <input type="search" placeholder="Type to filter" oninput="filterList(this, 'id_s-add')" style="margin-bottom:6px;width:100%">
+      {{ shortlist_form.add }}
+      <div class="help">Hold Ctrl (Cmd on a Mac) to pick several.</div>
+    </div>
+
+    <p style="margin-top:16px">
+      {% if next %}<button class="btn">Save and go back to the drawing</button>
+      <button class="btn secondary" name="stay" value="1" style="margin-left:8px">Save</button>
+      {% else %}<button class="btn">Save</button>{% endif %}
+      <button class="linklike" name="new_for" value="list" style="margin-left:12px">Add a product to the list</button></p>
   </form>
 </div>
+<script>
+function filterList(input, id) {
+  const q = input.value.toLowerCase();
+  for (const o of document.getElementById(id).options) o.hidden = q && !o.text.toLowerCase().includes(q);
+}
+</script>
 
 <div class="card">
   <h2>Fill this in from a drawing</h2>

@@ -18,10 +18,20 @@ class Project(models.Model):
         max_length=200, blank=True, help_text="Room naming convention, for example 'code then name'."
     )
     notes = models.TextField(blank=True, help_text="Scope notes: exclusions, glazing, recesses and similar.")
+    shortlist = models.ManyToManyField(
+        "LibraryProduct", blank=True, related_name="shortlisted_in",
+        help_text="Products from the list this tender uses, shown first wherever a product is chosen.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["-created_at"]
+
+    def project_products(self):
+        """This project's products: its shortlist and every product given to a finish code."""
+        ids = set(self.shortlist.values_list("id", flat=True))
+        ids |= set(self.products.exclude(library=None).values_list("library_id", flat=True))
+        return LibraryProduct.objects.filter(id__in=ids, active=True)
 
     def __str__(self) -> str:
         return f"{self.code} {self.name}"

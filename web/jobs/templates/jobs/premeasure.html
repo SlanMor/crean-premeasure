@@ -82,9 +82,9 @@
 
 <div class="card preview">
   <h2>Drawing</h2>
-  <p class="key"><span><span class="swatch" style="background:#16a050"></span> found, product chosen</span>
-    <span><span class="swatch" style="background:#e68c00"></span> found, needs a check</span>
-    <span><span class="swatch" style="background:#888"></span> found, no product</span></p>
+  <p class="key"><span><span class="swatch" style="background:#16a050"></span> found, product chosen, checked</span>
+    <span><span class="swatch" style="background:#e68c00"></span> found, product chosen, needs a check</span>
+    <span><span class="swatch" style="background:#2864dc"></span> found, no product yet</span></p>
   {% if pm.preview %}<a href="{% url 'preview' pm.pk %}" target="_blank"><img src="{% url 'preview' pm.pk %}?v={{ pm.updated_at|date:'U' }}" alt="Rooms found on the drawing"></a>{% endif %}
 </div>
 
@@ -95,14 +95,7 @@
   <div class="note"><b>The products have changed since the Callidus files were written.</b> The choices below are the project's products as they are now. Check them, then write again to update the files.</div>
   {% endif %}
   {% if missing %}
-  <div class="note">
-    {{ missing|length }} finish code{{ missing|length|pluralize }} on this drawing {{ missing|length|pluralize:"is,are" }} not in the project's products yet: {% for f in missing %}{{ f.code }}{% if not forloop.last %}, {% endif %}{% endfor %}.
-    Add them, then choose a product for each.
-    <form method="post" action="{% url 'fill_setup' project.pk pm.pk %}" style="margin-top:10px">{% csrf_token %}
-      <input type="hidden" name="next" value="{% url 'premeasure' pm.pk %}">
-      <button class="btn">Add them to the project's products</button>
-    </form>
-  </div>
+  <p class="muted">{{ missing|length }} finish code{{ missing|length|pluralize }} on this drawing {{ missing|length|pluralize:"has,have" }} no product in the project yet: {% for f in missing %}{{ f.code }}{% if not forloop.last %}, {% endif %}{% endfor %}. Choose one below and press Save products (or write): it is added to the <a href="{% url 'setup' project.pk %}?next={{ request.get_full_path|urlencode }}">project's products</a>, so every drawing on the project gets it.</p>
   {% endif %}
   <form method="post" action="{% url 'write' pm.pk %}">{% csrf_token %}
   <table>
@@ -119,7 +112,8 @@
     {% endfor %}
   </table>
   {% if unmapped %}<p class="note" style="margin-top:16px">Found on this drawing with no product: {% for f in unmapped %}{{ f.code }}{% if not forloop.last %}, {% endif %}{% endfor %}. These are left out of Callidus unless you choose a product.</p>{% endif %}
-  <p style="margin-top:16px"><button class="btn">{% if pm.status == "done" %}Write again with these products{% else %}Write Callidus files{% endif %}</button></p>
+  <p style="margin-top:16px"><button class="btn" name="action" value="write">{% if pm.status == "done" %}Write again with these products{% else %}Write Callidus files{% endif %}</button>
+    <button class="btn secondary" name="action" value="save" style="margin-left:8px">Save products</button></p>
   </form>
 </div>
 

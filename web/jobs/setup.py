@@ -207,6 +207,36 @@ def drawing_mapping(pm) -> tuple[dict, dict]:
     return floors, skirtings
 
 
+def keep_in_project(pm, floors: dict, skirtings: dict) -> list[str]:
+    """Products chosen on a drawing for codes the project has no product for
+    become the project's products, so the next drawing gets them too. A code
+    the project already has a product for is left alone (choosing differently
+    on one drawing is for that drawing only). Returns the codes added."""
+    from .models import Product
+
+    rows = {norm(p.finish_code): p for p in pm.project.products.select_related("library")}
+    libs = {p.name: p for p in LibraryProduct.objects.filter(name__in=set(floors.values()) | set(skirtings.values()))}
+    added = []
+    for f in pm.summary["finishes"]:
+        name = (floors if f["kind"] == "floor" else skirtings).get(f["code"])
+        lib = libs.get(name or "")
+        if lib is None:
+            continue
+        row = rows.get(norm(f["code"]))
+        if row is None:
+            Product.objects.create(
+                project=pm.project, finish_code=f["code"][:30], library=lib, description=_legend_description(f),
+                kind="floor" if f["kind"] == "floor" else "skirting", spec_source=f"Chosen on drawing {pm.title}"[:200],
+            )
+        elif row.library_id is None:
+            row.library = lib
+            row.save(update_fields=["library"])
+        else:
+            continue
+        added.append(f["code"])
+    return added
+
+
 def chosen_differently(pm, floors: dict, skirtings: dict) -> dict:
     """What the estimator chose on a drawing that differs from the project's products."""
     dfl, dsk = default_mapping(pm.project, pm.summary)

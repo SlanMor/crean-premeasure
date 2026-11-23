@@ -118,27 +118,34 @@ class UploadDrawingsForm(forms.Form):
         return files
 
 
+def _grouped(none: str, names: list[str], mine: set[str]) -> list:
+    """Choices with this project's products first, then the rest of the list."""
+    first = [(n, n) for n in names if n in mine]
+    rest = [(n, n) for n in names if n not in mine]
+    if not first:
+        return [("", none)] + rest
+    return [("", none), ("This project's products", first), ("All products", rest)]
+
+
 class ProductsForm(forms.Form):
     """One choice per finish on the drawing: a product from the list, or leave out.
     The project setup gives the starting choice."""
 
     LEAVE_OUT = ""
 
-    def __init__(self, *args, summary: dict, floors: dict, skirtings: dict, **kwargs):
+    def __init__(self, *args, summary: dict, floors: dict, skirtings: dict, project=None, **kwargs):
         super().__init__(*args, **kwargs)
         products = list(LibraryProduct.objects.filter(active=True).values_list("name", "type"))
-        floor_names = [n for n, t in products if t in LibraryProduct.FLOOR_TYPES]
-        edge_names = [n for n, t in products if t not in LibraryProduct.FLOOR_TYPES]
+        mine = set(project.project_products().values_list("name", flat=True)) if project else set()
         for f in summary["finishes"]:
-            if f["kind"] == "floor":
-                none, initial, names = "Leave out (not priced)", floors.get(f["code"], ""), floor_names
-            else:
-                none, initial, names = "Not on room edges", skirtings.get(f["code"], ""), edge_names
+            floor = f["kind"] == "floor"
+            names = [n for n, t in products if (t in LibraryProduct.FLOOR_TYPES) == floor]
+            none = "Leave out (not priced)" if floor else "Not on room edges"
+            initial = (floors if floor else skirtings).get(f["code"], "")
             if initial and initial not in names:
                 names = names + [initial]
             self.fields[self.key(f)] = forms.ChoiceField(
-                choices=[(self.LEAVE_OUT, none)] + [(m, m) for m in names],
-                required=False, initial=initial, label=f["code"],
+                choices=_grouped(none, names, mine), required=False, initial=initial, label=f["code"],
             )
         self.finishes = summary["finishes"]
 
@@ -164,9 +171,15 @@ class SetupRowForm(forms.ModelForm):
         model = Product
         fields = ["finish_code", "library"]
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, mine: set | None = None, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["library"].queryset = LibraryProduct.objects.filter(active=True)
+        if mine:  # this project's products first
+            items = list(self.fields["library"].queryset)
+            first = [(p.pk, p.name) for p in items if p.pk in mine]
+            rest = [(p.pk, p.name) for p in items if p.pk not in mine]
+            self.fields["library"].choices = [("", "Not chosen yet"), ("This project's products", first),
+                                              ("All products", rest)]
         self.fields["library"].required = False
         self.fields["library"].empty_label = "Not chosen yet"
         self.fields["finish_code"].widget.attrs["placeholder"] = "code"
@@ -281,3 +294,10 @@ class UserForm(forms.ModelForm):
 class ScaleForm(forms.Form):
     scale = forms.IntegerField(label="Scale 1:", min_value=1, max_value=5000, initial=100)
     sheet = forms.ChoiceField(label="Sheet size", required=False, choices=SHEET_CHOICES)
+
+
+class ShortlistForm(forms.Form):
+    add = forms.ModelMultipleChoiceField(
+        queryset=LibraryProduct.objects.filter(active=True), required=False,
+        label="Add products from the list",
+    )
