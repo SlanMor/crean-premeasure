@@ -292,3 +292,37 @@ class ScaleTest(TestCase):
             pm.refresh_from_db()
             self.assertEqual((pm.scale, pm.status, pm.summary["scale"]), (100, Premeasure.Status.REVIEW, 100.0))
         shutil.rmtree(media, ignore_errors=True)
+
+
+class PictureTest(TestCase):
+    def test_a_scanned_drawing_asks_for_its_sheet_size_and_scale(self):
+        import io
+
+        from PIL import Image
+
+        buf = io.BytesIO()
+        Image.new("RGB", (1654, 1169), "white").save(buf, "PDF", resolution=100)  # a blank "scan"
+        media = tempfile.mkdtemp()
+        with override_settings(MEDIA_ROOT=media, JOBS_INLINE=True):
+            self.client.force_login(User.objects.create_user("est"))
+            project = Project.objects.create(code="C", name="x")
+            drawing = Upload.objects.create(project=project, kind=Upload.Kind.DRAWING,
+                                            file=SimpleUploadedFile("scan.pdf", buf.getvalue()))
+            pm = Premeasure.objects.create(project=project, title="t", drawing=drawing)
+            from .tasks import analyse_premeasure
+
+            analyse_premeasure(pm.pk)
+            pm.refresh_from_db()
+            self.assertEqual(pm.status, Premeasure.Status.FAILED)
+            self.assertTrue(pm.needs_sheet and pm.needs_scale and pm.plain_error)
+            page = self.client.get(reverse("premeasure", args=[pm.pk]))
+            self.assertContains(page, "What sheet size and scale is this drawing?")
+            self.assertContains(page, '<option value="A0"')
+            self.client.post(reverse("set_scale", args=[pm.pk]), {"scale": "100", "sheet": "A3"})
+            pm.refresh_from_db()
+            self.assertEqual((pm.sheet, pm.scale), ("A3", 100))
+            # read again with both: a blank sheet has no legend, said in plain words
+            self.assertEqual(pm.status, Premeasure.Status.FAILED)
+            self.assertIn("no finish legend", pm.error)
+            self.assertTrue(pm.plain_error and not pm.needs_scale)
+        shutil.rmtree(media, ignore_errors=True)

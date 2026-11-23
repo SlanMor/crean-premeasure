@@ -22,12 +22,15 @@ When a product is not already in the Callidus job a file is built on, the platfo
 4. **Add finishes drawings,** one or many at a time. A PDF with several pages is fine: each page with a scale and the word "finish" is read, and other pages are skipped. Drawings are read one after another in the background (one to three minutes each). Tick "Write the Callidus files automatically" and every drawing whose finishes all have a product is written without waiting; the rest wait for review. Tick "Email me" for an email when the whole batch is done.
 5. **Review a drawing** where needed: the picture of the rooms found, each legend finish with its product (change one for this drawing only), and the areas with their status and reasons. Write, then download the zip.
 
+**Scanned drawings.** A PDF that is only a picture of the drawing (scanned, or saved as an image) is measured from its colours instead. It needs the sheet size (A0, A1...) and the scale. Both are read from the title block when they are printed there; otherwise the drawing stops and asks for them (or give the sheet size when uploading). Every room from a picture is marked "CHECK - ", room names are often missing, and the review page says where the sheet size and scale came from. Areas on simulated scans came within 1 to 3% of the vector reading for most rooms. The architect's own PDF export is exact: ask for it whenever you can.
+
 The zip holds the `.est`, its `.CalBack`, a review file (every area, its status and reasons), a quantities file (net quantity per product, wastage %, quantity with wastage) and a READ ME. Unzip to a local folder (Callidus cannot open files on the Z: drive). Rooms named "CHECK - " need a look. No room has a layout yet: select it and press F9.
 
 ## What the software will not do yet
 
 - Guess. A finish with no product is left out of Callidus and listed in the review file.
-- Measure finishes drawn only in black linework (often matwells). They are listed under "Measure by hand".
+- Measure finishes drawn only in black linework (often matwells), or, on a scanned drawing, only in hatching. They are listed under "Measure by hand".
+- Match plan colours that are lighter tints of the legend colours (some scanned drawings). They are listed under "Colours on the plan that are not in the legend" with their area.
 - Cut openings out of a Callidus room. Rooms with an opening or another finish inside are marked "CHECK - " with the area to cut out.
 - Add new tile products to Callidus.
 - Apply the measuring rules not marked "used now".

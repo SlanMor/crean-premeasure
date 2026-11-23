@@ -13,6 +13,9 @@ dependencies = [
     "openpyxl>=3.1",
     "pillow>=10.0",
     "numpy>=1.26",
+    # drawings that arrive as pictures: OpenCV (Apache 2.0) and Tesseract (Apache 2.0)
+    "opencv-python-headless>=4.9",
+    "pytesseract>=0.3.10",
 ]
 
 [project.optional-dependencies]

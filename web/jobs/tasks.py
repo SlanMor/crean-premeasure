@@ -63,9 +63,11 @@ def safe_name(text: str) -> str:
 
 def _fail(pm: Premeasure, exc: Exception) -> None:
     from premeasure_engine.drawing.pdf_reader import PictureOnly, ScaleNotFound
+    from premeasure_engine.drawing.picture import NoLegend, SheetNeeded
 
+    plain = (PictureOnly, ScaleNotFound, SheetNeeded, NoLegend)
     pm.status = Premeasure.Status.FAILED
-    pm.error = str(exc) if isinstance(exc, (PictureOnly, ScaleNotFound)) else f"{type(exc).__name__}: {exc}"
+    pm.error = str(exc) if isinstance(exc, plain) else f"{type(exc).__name__}: {exc}"
     pm.save(update_fields=["status", "error", "updated_at"])
 
 
@@ -87,7 +89,7 @@ def _analysis(pm: Premeasure):
         except Exception:
             pass  # stale after an engine update: read the drawing again
     return analyse(pm.drawing.file.path, _setup_names(pm), page=pm.page - 1, min_opening=_min_opening(pm),
-                   scale=pm.scale)
+                   scale=pm.scale, sheet=pm.sheet or None)
 
 
 def _save_file(pm: Premeasure, field: str, path: Path) -> None:
@@ -106,7 +108,7 @@ def analyse_premeasure(pk: int) -> None:
     pm.save(update_fields=["status", "error", "updated_at"])
     try:
         a = analyse(pm.drawing.file.path, _setup_names(pm), page=pm.page - 1, min_opening=_min_opening(pm),
-                    scale=pm.scale)
+                    scale=pm.scale, sheet=pm.sheet or None)
         pm.summary = summary(a)
         pm.summary["min_opening_m2"] = _min_opening(pm)
         pm.finish_products, pm.skirting_products = default_mapping(pm.project, pm.summary)
@@ -132,7 +134,7 @@ def analyse_premeasure(pk: int) -> None:
         _batch_progress(pm)
 
 
-def split_pdf(upload_id: int, batch_id: int, level: str) -> None:
+def split_pdf(upload_id: int, batch_id: int, level: str, scale: int | None = None, sheet: str = "") -> None:
     """A PDF with several pages: one drawing for each page that looks like a finishes plan."""
     from premeasure_engine.premeasure import pdf_pages, plan_pages
 
@@ -152,7 +154,7 @@ def split_pdf(upload_id: int, batch_id: int, level: str) -> None:
         Premeasure.objects.create(
             project=batch.project, level=level, title=safe_name(f"{batch.project.code} {stem[:40]} p{p + 1}"),
             drawing=upload, page=p + 1, starter=_starter(batch.project), created_by=batch.created_by,
-            batch=batch, status=Premeasure.Status.QUEUED,
+            batch=batch, status=Premeasure.Status.QUEUED, scale=scale, sheet=sheet,
         )
         for p in pages
     ]

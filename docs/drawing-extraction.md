@@ -50,3 +50,24 @@ What the differences are:
 - **Stairs** add 15 to 45% to the stair finish (F1-G on Shellybanks, Cinder on Limerick 2F). We measure the stair in plan, flights included; Crean measures landings and half landings. Stair rooms are now marked for review.
 - **Room splits.** Crean splits long corridors and class bases into several rooms; we return one area per continuous finish. Totals agree; one-to-one room matches are lower for that reason (Shellybanks GF: 35 of 54 within 10%).
 - **Product matching:** 18 to 20 of 21 Shellybanks finishes and 8 of 12 Limerick finishes match a Crean material by code. F1-H (Veneto Midnight) is missing from the Shellybanks legend but written in the rooms; it is found by its tag and matches Crean to 0.04 m².
+
+## Drawings that arrive as pictures, 23 November 2026
+
+A PDF with no linework (scanned, or flattened to an image, like the UCD first floor part B) is read by `drawing/picture.py`, with OpenCV for the image work and Tesseract for the text.
+
+1. The picture is read at its own resolution. Sheet size and scale come from the estimator, else the title block. A sheet size from nowhere else (the PDF page size) is only used if at least three printed room areas confirm it; otherwise the estimator is asked.
+2. Legend swatches are found as small closed boxes or single-colour patches stacked in a column; their text is read beside them. Headings become codes (FLOOR FINISH TYPE 9 is FF9). Finishes named on the legend with no swatch found (hatching only) go to "Measure by hand". Codes that break the legend's pattern (P22 among F1-A, F1-B...) are reported as unclear.
+3. Each plan pixel takes the nearest legend colour after a small median filter (it takes out stipple and text). A room only starts where the swatch colour itself shows in most pixels (so grey walls or textures that only average out to a finish colour start nothing), and grows back out to the wall face: across a coloured skirting band and the line beside it, but never into a solid wall.
+4. Outlines are fitted with straight lines snapped to the building's angles and pushed out a quarter pixel to the middle of the soft edge.
+5. Room tags and printed areas are read inside each room (only words Tesseract is sure of). If at least three printed areas agree and differ from the measured ones by more than 3%, every room says to check the sheet size and scale; one room more than 5% out says to check its outline.
+6. Every room is marked for review. Coloured plan areas that match no legend colour are reported with their area.
+
+Accuracy against the vector reading of the same drawing, rendered as a picture at 106 dpi (a typical A0 or A1 scan), rooms matched one to one:
+
+| Drawing | Median error | Mean absolute error |
+|---|---|---|
+| Limerick 2F (A0) | +0.8% | 1.4% |
+| Shellybanks 1404 (A1) | +0.9% | 1.5% |
+| Cashel P2 (A1) | -2.5% | 2.9% |
+
+Cashel draws its fills under the heavy wall lines, so a picture of it reads a little short; Limerick stops its fills at the line. Hatch-only finishes (Cashel FF5 and FF10) are not measured. On the real UCD scan, the sheet (A0) and scale (1:100) are read from the title block; 690 m2 is measured, and about 1,050 m2 is reported as colours not in the legend, because the plan uses lighter tints of the legend colours, which cannot be tied to one finish without guessing.

@@ -29,10 +29,12 @@
 {% elif pm.status == "failed" %}
 <div class="card">
   {% if pm.needs_scale %}
-  <h2>What scale is this drawing?</h2>
+  <h2>{% if pm.needs_sheet %}What sheet size and scale is this drawing?{% else %}What scale is this drawing?{% endif %}</h2>
   <p>{{ pm.error }}</p>
-  <form method="post" action="{% url 'set_scale' pm.pk %}" style="display:flex;gap:8px;align-items:flex-end;max-width:360px">{% csrf_token %}
-    <div class="field" style="margin:0;flex:1"><label for="id_scale">Scale 1:</label><input type="number" name="scale" id="id_scale" value="100" min="1" max="5000"></div>
+  {% if pm.needs_sheet %}<p class="muted">The sheet size is the paper the drawing was made for (A0, A1...), usually in the title block next to the scale. Every area is measured from these two, so check them before reading again.</p>{% endif %}
+  <form method="post" action="{% url 'set_scale' pm.pk %}" style="display:flex;gap:8px;align-items:flex-end;max-width:{% if pm.needs_sheet %}520{% else %}360{% endif %}px">{% csrf_token %}
+    {% if pm.needs_sheet %}<div class="field" style="margin:0;flex:1"><label for="id_sheet">Sheet size</label><select name="sheet" id="id_sheet" required>{% for s in sheets %}<option value="{{ s }}"{% if s == pm.sheet or not pm.sheet and s == "A1" %} selected{% endif %}>{{ s }}</option>{% endfor %}</select></div>{% endif %}
+    <div class="field" style="margin:0;flex:1"><label for="id_scale">Scale 1:</label><input type="number" name="scale" id="id_scale" value="{{ pm.scale|default:100 }}" min="1" max="5000"></div>
     <button class="btn">Read it again</button>
   </form>
   {% elif pm.plain_error %}
@@ -66,6 +68,13 @@
     <div class="stat"><b>{{ n_written }}</b><span>areas with a product ({{ area_written|floatformat:"2g" }} m²)</span></div>
     <div class="stat"><b>{{ n_review }}</b><span>areas to check</span></div>
   </div>
+  {% if pm.summary.picture %}
+  <p class="note" style="margin:16px 0 0"><b>Read from a picture of the drawing</b> (scanned or saved as an image), so every area is measured from colours and every room needs a check.
+  Sheet {{ pm.summary.picture.sheet }} ({{ pm.summary.picture.sources.sheet }}), scale 1:{{ pm.summary.scale|floatformat:"0" }} ({{ pm.summary.picture.sources.scale }}).
+  {% if pm.summary.picture.agrees %}Room areas printed on the drawing agree to within {{ pm.summary.picture.printed_areas.off }}% over {{ pm.summary.picture.printed_areas.rooms }} rooms.{% elif pm.summary.picture.printed_areas.ratio %}<b>Room areas printed on the drawing differ from those measured by {{ pm.summary.picture.printed_areas.off }}% over {{ pm.summary.picture.printed_areas.rooms }} rooms: check the sheet size and scale, then read it again.</b>{% else %}The room areas printed on the drawing could not be read to check the scale, so check one known dimension in Callidus.{% endif %}
+  {% if pm.summary.picture.unclear_codes %}Finish codes unclear on the picture: {{ pm.summary.picture.unclear_codes|join:", " }}.{% endif %}
+  The architect's own PDF export gives exact areas: ask for it if you can.</p>
+  {% endif %}
   {% if pm.summary.manual_finishes %}
   <p class="note" style="margin:16px 0 0">Measure by hand: {{ pm.summary.manual_finishes|join:", " }}. These are drawn in black linework only (often matwells), which the software cannot yet tell apart from walls and doors.</p>
   {% endif %}
