@@ -185,7 +185,7 @@ class FlowTest(TestCase):
         self.assertRedirects(r, reverse("premeasure", args=[pm.pk]))
         self.assertEqual(pm.status, Premeasure.Status.REVIEW, pm.error)
         page = self.client.get(r.url)
-        self.assertContains(page, "not in the project's products yet")
+        self.assertContains(page, "no product in the project yet")
         self.assertContains(page, "Measure by hand: FF5")
 
         self.client.post(reverse("fill_setup", args=[self.project.pk, pm.pk]))
@@ -367,10 +367,57 @@ class DrawingProductsTest(TestCase):
                 self.client.post(reverse("write", args=[pm.pk]),
                                  {"floor:FF1": "Carpet A", "floor:FF2": "Carpet A", "floor:FF3": "Lino C"})
             pm.refresh_from_db()
-            self.assertEqual(pm.chosen_here, {"floor": {"FF3": "Lino C"}, "skirting": {}})
+            # FF3 had no product in the project: it is added there, not kept as this drawing's own
+            self.assertEqual(pm.chosen_here, {"floor": {}, "skirting": {}})
+            self.assertEqual(project.products.get(finish_code="FF3").library.name, "Lino C")
             pm.status = Premeasure.Status.DONE  # as when the write has finished
             pm.save()
             # a later change to the project's products reaches the drawing
             Product.objects.filter(finish_code="FF2").update(library=LibraryProduct.objects.get(name="Vinyl B"))
             self.assertEqual(shown(), {"floor:FF1": "Carpet A", "floor:FF2": "Vinyl B", "floor:FF3": "Lino C"})
         shutil.rmtree(media, ignore_errors=True)
+
+
+class ProductsPageTest(TestCase):
+    def setUp(self):
+        self.client.force_login(User.objects.create_user("est"))
+        self.project = Project.objects.create(code="P", name="p")
+        self.a = LibraryProduct.objects.create(name="Carpet A", type="carpet_tile")
+        self.b = LibraryProduct.objects.create(name="Vinyl B")
+        self.row = Product.objects.create(project=self.project, finish_code="FF1", kind="floor",
+                                          description="CARPET PLANK TILE - Interface HN810 Slate")
+        Product.objects.create(project=self.project, finish_code="FF2", kind="floor")
+
+    def post(self, extra, next_url=""):
+        page = self.client.get(reverse("setup", args=[self.project.pk]))
+        fs = page.context["formset"]
+        data = {"p-TOTAL_FORMS": str(len(fs.forms)), "p-INITIAL_FORMS": str(len(fs.initial_forms)),
+                "p-MIN_NUM_FORMS": "0", "p-MAX_NUM_FORMS": "1000"}
+        for i, f in enumerate(fs.forms):
+            if f.instance.pk:
+                data.update({f"p-{i}-id": f.instance.pk, f"p-{i}-finish_code": f.instance.finish_code,
+                             f"p-{i}-library": self.b.pk if f.instance.finish_code == "FF2" else ""})
+        data.update(extra)
+        url = reverse("setup", args=[self.project.pk]) + (f"?next={next_url}" if next_url else "")
+        return self.client.post(url, data)
+
+    def test_adding_a_new_product_saves_the_page_first(self):
+        r = self.post({"new_for": str(self.row.pk)})
+        self.assertEqual(self.project.products.get(finish_code="FF2").library, self.b)  # not lost
+        self.assertIn(reverse("product_new"), r.url)
+        self.assertIn("type=carpet_tile", r.url)
+        self.assertIn(f"row={self.row.pk}", r.url)
+
+    def test_save_and_go_back_to_the_drawing(self):
+        r = self.post({}, next_url="/premeasure/1/")
+        self.assertEqual(r.url, "/premeasure/1/")
+        self.assertEqual(self.project.products.get(finish_code="FF2").library, self.b)
+
+    def test_shortlist_from_the_master_list(self):
+        self.post({"s-add": [str(self.a.pk)], "stay": "1"})
+        self.assertEqual(list(self.project.shortlist.all()), [self.a])
+        page = self.client.get(reverse("setup", args=[self.project.pk]))
+        self.assertContains(page, "This project&#x27;s products")
+        self.assertEqual({p.name for p in self.project.project_products()}, {"Carpet A", "Vinyl B"})
+        self.post({"drop": [str(self.a.pk)], "stay": "1"})
+        self.assertFalse(self.project.shortlist.exists())

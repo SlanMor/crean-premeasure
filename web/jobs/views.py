@@ -18,6 +18,7 @@ from .forms import (
     RulesForm,
     ScaleForm,
     SetupFormSet,
+    ShortlistForm,
     StarterForm,
     TemplateForm,
     UploadDrawingsForm,
@@ -29,6 +30,7 @@ from .setup import (
     base_job,
     base_products,
     chosen_differently,
+    keep_in_project,
     drawing_mapping,
     fill_from_summary,
     house_job,
@@ -90,10 +92,14 @@ def project(request, pk: int):
 
 @login_required
 def setup(request, pk: int):
-    """Project setup: which product each finish code on the drawings uses."""
+    """Project setup: which product each finish code on the drawings uses, and
+    the products this tender uses (shown first wherever a product is chosen)."""
     project = get_object_or_404(Project, pk=pk)
-    formset = SetupFormSet(request.POST or None, queryset=project.products.select_related("library"), prefix="p")
-    if request.method == "POST" and formset.is_valid():
+    mine = set(project.project_products().values_list("id", flat=True))
+    formset = SetupFormSet(request.POST or None, queryset=project.products.select_related("library"), prefix="p",
+                           form_kwargs={"mine": mine})
+    shortlist = ShortlistForm(request.POST or None, prefix="s")
+    if request.method == "POST" and formset.is_valid() and shortlist.is_valid():
         changed = formset.save(commit=False)
         for obj in formset.deleted_objects:
             obj.delete()
@@ -102,20 +108,55 @@ def setup(request, pk: int):
             if not obj.spec_source:
                 obj.spec_source = "Entered in project setup"
             obj.save()
-        messages.success(request, "Project setup saved.")
-        return _back(request, request.GET.get("next"), reverse("setup", args=[pk]))
+        project.shortlist.add(*shortlist.cleaned_data["add"])
+        drop = [int(x) for x in request.POST.getlist("drop") if x.isdigit()]
+        if drop:
+            project.shortlist.remove(*drop)
+        messages.success(request, "Products saved.")
+        here = request.get_full_path()
+        new_for = request.POST.get("new_for", "")
+        if new_for:  # saved first, so nothing chosen above is lost
+            return redirect(_new_product_url(project, new_for, here))
+        if request.POST.get("stay"):
+            return redirect(here)
+        return _back(request, request.GET.get("next"), here)
     return render(
         request,
         "jobs/setup.html",
         {
             "project": project,
             "formset": formset,
+            "shortlist_form": shortlist,
+            "shortlist": project.shortlist.filter(active=True),
             "job": base_job(project),
             "drawings": project.premeasures.exclude(summary=None),
             "starter_form": StarterForm(),
             "next": request.GET.get("next", ""),
         },
     )
+
+
+def _new_product_url(project: Project, new_for: str, back: str) -> str:
+    """The new product page, started from what a setup row's legend says."""
+    from urllib.parse import urlencode
+
+    params = {"next": back}
+    row = project.products.filter(pk=int(new_for)).first() if new_for.isdigit() else None
+    if row is not None:
+        text = row.description.upper()
+        if row.kind == "skirting":
+            kind = "skirting"
+        elif "CARPET" in text and ("TILE" in text or "PLANK" in text):
+            kind = "carpet_tile"
+        elif any(w in text for w in ("PORCELAIN", "CERAMIC", "TERRAZZO TILE", "FLOOR TILE")):
+            kind = "tile"
+        elif "MATWELL" in text or "ENTRANCE MAT" in text:
+            kind = "matwell"
+        else:
+            kind = "sheet"
+        name = f"{row.finish_code} - {row.description}"
+        params.update(row=row.pk, type=kind, name=name[:97] + "..." if len(name) > 100 else name)
+    return f"{reverse('product_new')}?{urlencode(params)}"
 
 
 @login_required
@@ -295,8 +336,8 @@ def premeasure(request, pk: int):
             refresh_preview(pm, set(floors))
         except Exception:
             pass  # the picture is a convenience; never block the page on it
-        form = ProductsForm(summary=pm.summary, floors=floors, skirtings=skirtings)
-        in_setup = {norm(p.finish_code) for p in pm.project.products.all()}
+        form = ProductsForm(summary=pm.summary, floors=floors, skirtings=skirtings, project=pm.project)
+        in_setup = {norm(p.finish_code) for p in pm.project.products.exclude(library=None)}
         rooms = _rooms_view(pm, floors)
         ctx.update(
             form=form,
@@ -321,12 +362,19 @@ def write(request, pk: int):
     pm = get_object_or_404(Premeasure, pk=pk)
     if pm.busy or not pm.summary:
         return redirect("premeasure", pk=pk)
-    form = ProductsForm(request.POST, summary=pm.summary, floors={}, skirtings={})
+    form = ProductsForm(request.POST, summary=pm.summary, floors={}, skirtings={}, project=pm.project)
     if not form.is_valid():
         messages.error(request, "One of the products is no longer in the product list. Please choose again.")
         return redirect("premeasure", pk=pk)
-    pm.finish_products, pm.skirting_products = form.chosen()
-    pm.chosen_here = chosen_differently(pm, pm.finish_products, pm.skirting_products)
+    floors, skirtings = form.chosen()
+    added = keep_in_project(pm, floors, skirtings)
+    pm.chosen_here = chosen_differently(pm, floors, skirtings)
+    if request.POST.get("action") == "save":  # keep the choices, write later
+        pm.save(update_fields=["chosen_here", "updated_at"])
+        messages.success(request, "Products saved." + (
+            f" {', '.join(added)} added to the project's products." if added else ""))
+        return redirect("premeasure", pk=pk)
+    pm.finish_products, pm.skirting_products = floors, skirtings
     if not pm.finish_products:
         pm.save(update_fields=["finish_products", "skirting_products", "chosen_here", "updated_at"])
         messages.error(request, "Choose a product for at least one finish.")

@@ -426,7 +426,7 @@ def _page_image(a: Analysis, dpi: int, bilevel: bool = False):
 
 def render_preview(a: Analysis, out_png: str | Path, dpi: int = 60, highlight: set[str] | None = None) -> Path:
     """A small picture of the drawing with every room outlined: green when
-    verified, amber when it needs review, grey when its finish has no product
+    verified, amber when it needs review, blue when its finish has no product
     (``highlight`` is the set of finish codes with a product; None = all)."""
     from PIL import Image, ImageDraw
 
@@ -437,7 +437,7 @@ def render_preview(a: Analysis, out_png: str | Path, dpi: int = 60, highlight: s
     d = ImageDraw.Draw(over)
     for r in a.rooms:
         if highlight is not None and (r.finish is None or r.finish.code not in highlight):
-            colour = (120, 120, 120)
+            colour = (40, 100, 220)
         elif r.status == "Verified":
             colour = (22, 140, 70)
         else:
