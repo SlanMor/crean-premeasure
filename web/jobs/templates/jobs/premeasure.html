@@ -71,6 +71,13 @@
   {% if pm.written.left_out_rooms %}{{ pm.written.left_out_rooms }} areas ({{ pm.written.left_out_m2|floatformat:"2g" }} m²) have no product and are only in the review file.{% endif %}
   {% if pm.written.by_hand_rooms %}{{ pm.written.by_hand_rooms }} area{{ pm.written.by_hand_rooms|pluralize }} ({{ pm.written.by_hand_m2|floatformat:"2g" }} m²) marked to measure by hand {{ pm.written.by_hand_rooms|pluralize:"is,are" }} left out.{% endif %}</p>
   <p><a class="btn" href="{% url 'download' pm.pk %}">Download Callidus files (.zip)</a></p>
+  {% with back=pm.checked_jobs.all|first %}
+  <form method="post" action="{% url 'checked' project.pk %}" enctype="multipart/form-data" class="step" style="margin:0 0 14px">{% csrf_token %}
+    <input type="hidden" name="drawing" value="{{ pm.pk }}"><input type="hidden" name="next" value="{{ request.get_full_path }}">
+    <b>Checked and finished in Callidus?</b> Upload the job back for Crean's measure spreadsheet{% if back %} (last uploaded {{ back.uploaded_at|date:"j M H:i" }}: <a href="{% url 'checked_job' back.pk %}">see what changed</a>){% endif %}.
+    <div style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="file" name="jobs" accept=".est" required><button class="btn small">Upload</button></div>
+  </form>
+  {% endwith %}
   <p class="muted">The zip holds the Callidus job, its background, a review file and a quantities file with wastage. Unzip to a local folder (not the Z: drive) before opening in Callidus. Rooms named "CHECK - " need a look; the reasons are in the review file. Change a product below and write again at any time.</p>
 </div>
 {% endif %}

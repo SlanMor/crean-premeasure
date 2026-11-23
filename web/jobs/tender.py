@@ -126,13 +126,25 @@ def tender_todo(project: Project, user=None) -> list[Todo]:
         items.append(Todo(", ".join(bits).capitalize() + ".", reverse("write_ready", args=[project.pk]),
                           "Write Callidus files", post=True))
 
+    from .roundtrip import not_back
+
+    waiting = [] if busy else not_back(project)
+    if waiting:
+        items.append(Todo(f"{len(waiting)} drawing{_s(waiting)} written to Callidus and not back yet. Once checked "
+                          "and finished in Callidus, upload the jobs: they give Crean's measure spreadsheet.",
+                          reverse("checked", args=[project.pk]), "Upload checked jobs"))
+    if project.checked_jobs.filter(current=True).exists():
+        items.append(Todo("Crean's measure spreadsheet, from the checked Callidus jobs.",
+                          reverse("crean_quantities", args=[project.pk]), "Download measure", level="info"))
+        items.append(Todo("What changed between the pre-measure and the checked jobs.",
+                          reverse("checked", args=[project.pk]), "See what changed", level="info"))
     q = queries(project)
     if q:
         items.append(Todo(f"{len(q)} quer{'ies' if len(q) != 1 else 'y'} for the architect.",
                           reverse("queries", args=[project.pk]), "See the queries", level="info"))
     if read:
         items.append(Todo("Quantities for the whole tender, by product, with what is still to measure by hand.",
-                          reverse("tender_quantities", args=[project.pk]), "Download quantities", level="info"))
+                          reverse("tender_quantities", args=[project.pk]), "Pre-measure quantities", level="info"))
     return items
 
 

@@ -1,6 +1,6 @@
 # premeasure-engine
 
-The measuring engine: reads Callidus files today; drawings and Callidus writing come next.
+The measuring engine: reads finishes drawings and Callidus files, writes pre-measured Callidus jobs, and turns checked jobs into Crean's measure spreadsheet.
 
 ```bash
 pip install -e ".[dev]"

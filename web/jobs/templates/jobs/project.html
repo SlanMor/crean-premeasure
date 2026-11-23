@@ -38,6 +38,9 @@
     <div class="step"><b>Tender questions</b>
       {% if own_rules %}Set for this tender.{% else %}Following the company rules.{% endif %}
       <div style="margin-top:8px"><a class="btn small secondary" href="{% url 'project_rules' project.pk %}">Open</a></div></div>
+    <div class="step"><b>Back from Callidus</b>
+      Upload the checked jobs for Crean's measure spreadsheet, and see what changed.
+      <div style="margin-top:8px"><a class="btn small secondary" href="{% url 'checked' project.pk %}">Open</a></div></div>
     <div class="step"><b>Queries for the architect</b>
       Gathered from every drawing, with an email ready to send.
       <div style="margin-top:8px"><a class="btn small secondary" href="{% url 'queries' project.pk %}">Open</a></div></div>

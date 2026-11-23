@@ -446,3 +446,27 @@ class RoomCheck(models.Model):
     class Meta:
         ordering = ["premeasure", "room_id"]
         constraints = [models.UniqueConstraint(fields=["premeasure", "room_id"], name="one_check_per_room")]
+
+
+class CheckedJob(models.Model):
+    """A Callidus job as the estimator saved it after checking: the final
+    measure. Crean's quantities come from these, and each is compared with the
+    drawing's pre-measure to see how much needed changing."""
+
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="checked_jobs")
+    premeasure = models.ForeignKey(Premeasure, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name="checked_jobs", help_text="The drawing it was pre-measured from.")
+    upload = models.ForeignKey(Upload, on_delete=models.PROTECT, related_name="+")
+    title = models.CharField(max_length=200, help_text="The floor title inside the Callidus job.")
+    rooms = models.PositiveIntegerField(default=0)
+    area_m2 = models.FloatField(default=0)
+    comparison = models.JSONField(null=True, blank=True)
+    current = models.BooleanField(default=True, help_text="Replaced when a newer version of the same job is uploaded.")
+    uploaded_by = models.ForeignKey("auth.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-uploaded_at"]
+
+    def __str__(self) -> str:
+        return f"{self.project.code} {self.title}"

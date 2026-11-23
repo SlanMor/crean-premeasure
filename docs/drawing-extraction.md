@@ -71,3 +71,7 @@ Accuracy against the vector reading of the same drawing, rendered as a picture a
 | Cashel P2 (A1) | -2.5% | 2.9% |
 
 Cashel draws its fills under the heavy wall lines, so a picture of it reads a little short; Limerick stops its fills at the line. Hatch-only finishes (Cashel FF5 and FF10) are not measured. On the real UCD scan, the sheet (A0) and scale (1:100) are read from the title block; 690 m2 is measured, and about 1,050 m2 is reported as colours not in the legend, because the plan uses lighter tints of the legend colours, which cannot be tied to one finish without guessing.
+
+## Against Crean's own measure, 23 November 2026
+
+Crean's estimator measured Cashel P2 by hand in Callidus. Our pre-measure of the same drawing, written on the same background and compared room by room (`roundtrip.compare_jobs`): 98.6% of their floor lies inside our outlines. We measured 1,510 m2 against their 1,463 m2; the difference is floor we included that they left out (about 67 m2). Many rooms are split differently (they split circulation into design areas, for example), so room-by-room pairing understates the agreement; the floor agreement is the fairer figure. Real tenders uploaded back from Callidus now give this figure for every drawing (Settings, Accuracy on real tenders).

@@ -239,6 +239,44 @@ class RealDrawingTest(TenderBase):
         self.assertEqual(pm.status, Premeasure.Status.DONE, pm.error)
         self.assertEqual(pm.written["by_hand_rooms"], 1)
         self.assertAlmostEqual(pm.written["by_hand_m2"], biggest["area_m2"], places=1)
+        # the estimator checks it in Callidus and uploads it back: here, unchanged
+        import zipfile
+
+        from .models import CheckedJob
+
+        with pm.output.open("rb") as f, zipfile.ZipFile(f) as z:
+            name = next(n for n in z.namelist() if n.endswith(".est"))
+            data = z.read(name)
+        texts = [t.text for t in tender_todo(p)]
+        self.assertTrue(any("not back yet" in t for t in texts), texts)
+        r = self.client.post(reverse("checked", args=[p.pk]),
+                             {"jobs": [SimpleUploadedFile(Path(name).name, data)]})
+        self.assertRedirects(r, reverse("checked", args=[p.pk]))
+        job = CheckedJob.objects.get()
+        self.assertEqual(job.premeasure, pm)  # matched by its name
+        self.assertAlmostEqual(job.comparison["right_first_time"], 1.0, places=3)
+        self.assertContains(self.client.get(reverse("checked", args=[p.pk])), "100%")
+        self.assertContains(self.client.get(reverse("checked_job", args=[job.pk])), "Unchanged")
+        # uploading again from the drawing page replaces it
+        self.client.post(reverse("checked", args=[p.pk]), {"jobs": [SimpleUploadedFile("anything.est", data)],
+                                                           "drawing": str(pm.pk)})
+        self.assertEqual(CheckedJob.objects.filter(current=True).count(), 1)
+        self.assertFalse(CheckedJob.objects.get(pk=job.pk).current)
+        texts = [t.text for t in tender_todo(p)]
+        self.assertFalse(any("not back yet" in t for t in texts), texts)
+        from openpyxl import load_workbook
+
+        sheet = self.client.get(reverse("crean_quantities", args=[p.pk]))
+        ws = load_workbook(io.BytesIO(sheet.content))["ROOMS"]
+        self.assertEqual(ws["B1"].value, "Material Name")
+        self.assertGreater(ws.max_row, 10)
+        self.user.is_staff = True
+        self.user.save()
+        self.assertContains(self.client.get(reverse("accuracy")), "Right first time")
+        # a job that matches no drawing is kept for the spreadsheet, with nothing to compare
+        self.client.post(reverse("checked", args=[p.pk]), {"jobs": [SimpleUploadedFile("Other floor.est", est.read_bytes())]})
+        other = CheckedJob.objects.filter(current=True, premeasure=None).get()
+        self.assertIsNone(other.comparison)
         # reading again numbers the rooms afresh, so checks are cleared
         analyse_premeasure(pm.pk)
         self.assertFalse(RoomCheck.objects.filter(premeasure=pm).exists())
