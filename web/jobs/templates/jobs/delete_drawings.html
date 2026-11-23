@@ -1,0 +1,28 @@
+{% extends "jobs/base.html" %}
+{% block title %}Delete drawings · {{ project.code }}{% endblock %}
+{% block content %}
+<p class="muted"><a href="{% url 'project' project.pk %}">{{ project.code }} {{ project.name }}</a></p>
+<h1>Delete {{ rows|length }} drawing{{ rows|length|pluralize }}?</h1>
+<p class="sub">Each drawing goes with its reading, room checks, preview and Callidus files. This cannot be undone.</p>
+<div class="card">
+  <table>
+    <tr><th>Drawing</th><th>Status</th><th class="num">Space freed</th><th>Also</th></tr>
+    {% for r in rows %}
+    <tr><td>{{ r.d.title }}</td><td>{% with pm=r.d %}{% include "jobs/_status.html" %}{% endwith %}</td><td class="num">{{ r.bytes }}</td>
+      <td class="reasons">
+        {% if r.shared %}The PDF stays: other pages of it are still in use.{% endif %}
+        {% if r.newer %}{{ r.newer.title }} no longer counts as its new revision.{% endif %}
+        {% if r.older %}{{ r.older.title }}, which it replaced, becomes current again.{% endif %}
+        {% if r.back %}Its checked Callidus job stays in the measure spreadsheet.{% endif %}
+        {% if r.d.busy %}<b>Being read or written: it will be left.</b>{% endif %}
+      </td></tr>
+    {% endfor %}
+  </table>
+</div>
+<form method="post">{% csrf_token %}
+  {% for i in ids %}<input type="hidden" name="ids" value="{{ i }}">{% endfor %}
+  <input type="hidden" name="confirm" value="yes">
+  <button class="btn bad">Delete {{ rows|length }} drawing{{ rows|length|pluralize }}</button>
+  <a class="btn secondary" href="{% url 'project' project.pk %}" style="margin-left:8px">Cancel</a>
+</form>
+{% endblock %}

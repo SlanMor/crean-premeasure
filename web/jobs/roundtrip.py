@@ -86,12 +86,16 @@ def current_jobs(project: Project) -> list[CheckedJob]:
     return list(project.checked_jobs.filter(current=True).select_related("premeasure", "upload"))
 
 
+def jobs_with_files(project: Project) -> list[CheckedJob]:
+    return [j for j in current_jobs(project) if j.upload is not None]
+
+
 def crean_quantities(project: Project) -> bytes:
     """Crean's quantities spreadsheet from the tender's checked Callidus jobs."""
     from premeasure_engine.callidus import read_est
     from premeasure_engine.roundtrip import crean_workbook
 
-    jobs = current_jobs(project)
+    jobs = jobs_with_files(project)
     ests = [read_est(j.upload.file.path) for j in sorted(jobs, key=lambda j: j.title)]
     names = {m.name.strip() for e in ests for m in e.materials}
     kinds = {p.name.strip(): KIND_HEADINGS.get(p.type, "Other")

@@ -179,4 +179,5 @@
 </div>
 {% endif %}
 {% endif %}
+{% if not pm.busy %}<p class="muted" style="text-align:right"><a href="{% url 'delete_drawings' project.pk %}?ids={{ pm.pk }}">Delete this drawing</a></p>{% endif %}
 {% endblock %}

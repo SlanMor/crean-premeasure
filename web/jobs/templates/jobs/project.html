@@ -1,5 +1,6 @@
 {% extends "jobs/base.html" %}
-{% block title %}{{ project.code }} · Crean pre-measure{% endblock %}
+{% block title %}{{ project.code }} · Crean pre-measure{% if user.is_staff %}<p class="muted" style="text-align:right">{% if project.files_removed_at %}Files removed {{ project.files_removed_at|date:"j M Y" }}. {% endif %}{% if project.keep_files %}Files kept, never cleaned up. {% endif %}<a href="{% url 'delete_tender' project.pk %}">Delete this tender or its files</a></p>{% endif %}
+{% endblock %}
 {% block content %}
 <p class="muted"><a href="{% url 'home' %}">Tenders</a></p>
 <div class="head"><div>
@@ -17,19 +18,21 @@
 <div class="card">
   <h2>Drawings</h2>
   {% if premeasures %}
+  <form method="get" action="{% url 'delete_drawings' project.pk %}" id="pick"></form>
   <table>
-    <tr><th>Name</th><th>Level</th><th>Drawing</th><th>Status</th><th class="num">Rooms to check</th><th>Added</th></tr>
+    <tr><th style="width:24px"></th><th>Name</th><th>Level</th><th>Drawing</th><th>Status</th><th class="num">Rooms to check</th><th>Added</th></tr>
     {% for pm, n_check in premeasures %}
-    <tr><td><a href="{% url 'premeasure' pm.pk %}">{{ pm.title }}</a>{% if pm.supersedes and pm.revision_diff.counts %} <a class="pill off" href="{% url 'changes' pm.pk %}">new revision</a>{% endif %}</td><td>{{ pm.level }}</td>
+    <tr><td><input type="checkbox" name="ids" value="{{ pm.pk }}" form="pick" aria-label="Select {{ pm.title }}"></td><td><a href="{% url 'premeasure' pm.pk %}">{{ pm.title }}</a>{% if pm.supersedes and pm.revision_diff.counts %} <a class="pill off" href="{% url 'changes' pm.pk %}">new revision</a>{% endif %}</td><td>{{ pm.level }}</td>
         <td class="muted">{{ pm.drawing.drawing_number }}{% if pm.page > 1 %} p{{ pm.page }}{% endif %}{% if pm.drawing.revision %} rev {{ pm.drawing.revision }}{% endif %}</td>
         <td>{% include "jobs/_status.html" %}</td>
         <td class="num">{% if n_check %}<a href="{% url 'check' pm.pk %}">{{ n_check }}</a>{% endif %}</td>
         <td class="muted">{{ pm.created_at|date:"j M Y H:i" }}</td></tr>
     {% endfor %}
   </table>
+  <p style="margin:10px 0 0"><button class="linklike" form="pick">Delete the ticked drawings</button></p>
   {% else %}<p class="muted">No drawings yet.</p>{% endif %}
   {% if earlier %}<details style="margin-top:12px"><summary class="muted">{{ earlier|length }} earlier revision{{ earlier|length|pluralize }}, replaced</summary>
-  <table>{% for d in earlier %}<tr><td><a href="{% url 'premeasure' d.pk %}">{{ d.title }}</a></td><td class="muted">replaced by {{ d.superseded_by.title }}</td></tr>{% endfor %}</table></details>{% endif %}
+  <table>{% for d in earlier %}<tr><td><input type="checkbox" name="ids" value="{{ d.pk }}" form="pick" aria-label="Select {{ d.title }}"> <a href="{% url 'premeasure' d.pk %}">{{ d.title }}</a></td><td class="muted">replaced by {{ d.superseded_by.title }}</td></tr>{% endfor %}</table></details>{% endif %}
 </div>
 
 <div class="card">

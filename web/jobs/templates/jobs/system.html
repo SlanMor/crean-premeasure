@@ -1,0 +1,70 @@
+{% extends "jobs/base.html" %}
+{% block title %}System · Crean pre-measure{% endblock %}
+{% block content %}
+<p class="muted"><a href="{% url 'settings' %}">Settings</a></p>
+<h1>System</h1>
+<p class="sub">Backups, alerts, space on the server, and how long files are kept.</p>
+
+{% if alerts %}
+<div class="card" style="border-color:var(--bad)">
+  <h2>Problems now</h2>
+  <ul class="todo">{% for a in alerts %}<li><span class="dot" style="background:var(--bad)"></span><span class="text"><b>{{ a.subject }}</b> <span class="muted">since {{ a.first_at|date:"j M H:i" }}</span>{% if a.body %}<div class="reasons" style="white-space:pre-line">{{ a.body|truncatechars:400 }}</div>{% endif %}</span></li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+<div class="steps">
+<div class="card">
+  <h2>Backups</h2>
+  {% if target %}<p>Every night to {{ target }}: the database (14 daily, then monthly for a year) and the drawings and Callidus files.</p>
+  {% else %}<p class="note">Not set up. Add the BACKUP_S3_* settings to .env on the server (docs/deploy.md).</p>{% endif %}
+  {% if runs %}<table>{% for r in runs %}<tr><td>{{ r.started_at|date:"j M H:i" }}</td>
+    <td>{% if r.ok %}<span class="pill ok">Done</span>{% elif r.finished_at %}<span class="pill bad">Failed</span>{% else %}<span class="pill off">Running</span>{% endif %}</td>
+    <td class="reasons">{% if r.ok %}database {{ r.database_bytes|filesizeformat }}, {{ r.files_sent }} new file{{ r.files_sent|pluralize }} ({{ r.bytes_sent|filesizeformat }}) of {{ r.files_total }}{% else %}{{ r.error|truncatechars:160 }}{% endif %}</td></tr>{% endfor %}</table>{% else %}<p class="muted">No backups yet.</p>{% endif %}
+  <form method="post" style="margin-top:12px">{% csrf_token %}<button class="btn small secondary" name="action" value="backup"{% if not target %} disabled{% endif %}>Back up now</button></form>
+</div>
+
+<div class="card">
+  <h2>Space</h2>
+  <p><b>{{ disk.pct }}%</b> of the server's disk used ({{ disk_used }} of {{ disk_total }}). Drawings and files: {{ media }}.</p>
+  {% if sizes %}<table>{% for p, size in sizes %}<tr><td><a href="{% url 'project' p.pk %}">{{ p.code }}</a> {{ p.name|truncatechars:40 }}{% if p.keep_files %} <span class="pill off">kept</span>{% endif %}</td><td class="num">{{ size }}</td></tr>{% endfor %}</table>{% endif %}
+</div>
+</div>
+
+<form method="post" class="card">{% csrf_token %}
+  <h2>Alerts and retention</h2>
+  <div class="form-grid">
+    <div>{% with field=form.alert_emails %}{% include "jobs/_field.html" %}{% endwith %}
+      <p class="help">Alerts go to: {{ recipients|join:", "|default:"nobody yet (add an address, and the email settings in .env)" }}.</p></div>
+    <div>{% with field=form.working_files_days %}{% include "jobs/_field.html" %}{% endwith %}</div>
+    <div>{% with field=form.replaced_days %}{% include "jobs/_field.html" %}{% endwith %}</div>
+    <div>{% with field=form.tender_months %}{% include "jobs/_field.html" %}{% endwith %}</div>
+  </div>
+  <button class="btn">Save</button>
+  <button class="btn secondary" name="action" value="test_alert" style="margin-left:8px">Send a test alert</button>
+</form>
+
+<div class="card">
+  <h2>Next clean-up</h2>
+  <p class="muted">Every night at 4am, by the settings above. A tender marked "keep this tender's files" (in its details) never loses its drawings or Callidus files; only working files, which are made again when needed.</p>
+  {% if plan.empty %}<p>Nothing to remove.</p>{% else %}
+  <ul>
+    {% if plan.tenders %}<li>Files of {{ plan.tenders|length }} inactive tender{{ plan.tenders|length|pluralize }}: {% for p in plan.tenders %}{{ p.code }}{% if not forloop.last %}, {% endif %}{% endfor %}</li>{% endif %}
+    {% if plan.replaced %}<li>{{ plan.replaced|length }} replaced revision{{ plan.replaced|length|pluralize }}</li>{% endif %}
+    {% if plan.working %}<li>Working files of {{ plan.working|length }} drawing{{ plan.working|length|pluralize }}</li>{% endif %}
+  </ul>
+  <p>About {{ plan_bytes }} in all.</p>
+  <form method="post">{% csrf_token %}<button class="btn small secondary" name="action" value="cleanup">Clean up now</button></form>
+  {% endif %}
+</div>
+
+{% if deletions %}
+<div class="card">
+  <h2>Deleted recently</h2>
+  <table>{% for x in deletions %}<tr><td class="muted">{{ x.at|date:"j M Y H:i" }}</td><td>{{ x.what }}</td><td class="muted">{{ x.reason }}{% if x.by %}, {{ x.by.get_full_name|default:x.by.username }}{% endif %}</td><td class="num">{{ x.bytes_freed|filesizeformat }}</td></tr>{% endfor %}</table>
+</div>
+{% endif %}
+{% if recent_alerts %}
+<div class="card"><h2>Problems that cleared</h2>
+<table>{% for a in recent_alerts %}<tr><td>{{ a.subject }}</td><td class="muted">{{ a.first_at|date:"j M H:i" }} to {{ a.resolved_at|date:"j M H:i" }}</td></tr>{% endfor %}</table></div>
+{% endif %}
+{% endblock %}

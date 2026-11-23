@@ -19,6 +19,8 @@ urlpatterns = [
     path("projects/<int:pk>/quantities.xlsx", tender.tender_quantities, name="tender_quantities"),
     path("projects/<int:pk>/check/", tender.check_tender, name="check_tender"),
     path("projects/<int:pk>/status/", tender.todo_status, name="todo_status"),
+    path("projects/<int:pk>/delete-drawings/", tender.delete_drawings, name="delete_drawings"),
+    path("projects/<int:pk>/delete/", tender.delete_tender, name="delete_tender"),
     path("projects/<int:pk>/callidus-back/", tender.checked, name="checked"),
     path("projects/<int:pk>/measure.xlsx", tender.crean_quantities, name="crean_quantities"),
     path("checked/<int:pk>/", tender.checked_job, name="checked_job"),
@@ -56,6 +58,7 @@ urlpatterns = [
     path("settings/companies/<int:pk>/", tender.company_edit, name="company_edit"),
     path("settings/feedback/", tender.feedback, name="feedback"),
     path("settings/accuracy/", tender.accuracy_page, name="accuracy"),
+    path("settings/system/", tender.system, name="system"),
 ]
 
 admin.site.site_header = "Crean pre-measure (technical admin)"

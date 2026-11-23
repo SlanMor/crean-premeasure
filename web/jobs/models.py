@@ -60,6 +60,11 @@ class Project(models.Model):
         help_text="Products from the list this tender uses, shown first wherever a product is chosen.",
     )
     setup_step = models.CharField(max_length=20, choices=Step.choices, default=Step.DONE)
+    keep_files = models.BooleanField(
+        "keep this tender's files", default=False,
+        help_text="Never remove its drawings and files when tenders are cleaned up.",
+    )
+    files_removed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -474,7 +479,8 @@ class CheckedJob(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="checked_jobs")
     premeasure = models.ForeignKey(Premeasure, on_delete=models.SET_NULL, null=True, blank=True,
                                    related_name="checked_jobs", help_text="The drawing it was pre-measured from.")
-    upload = models.ForeignKey(Upload, on_delete=models.PROTECT, related_name="+")
+    upload = models.ForeignKey(Upload, on_delete=models.SET_NULL, null=True, blank=True, related_name="+",
+                               help_text="Empty once the file has been cleaned up; the figures are kept.")
     title = models.CharField(max_length=200, help_text="The floor title inside the Callidus job.")
     rooms = models.PositiveIntegerField(default=0)
     area_m2 = models.FloatField(default=0)
@@ -488,3 +494,76 @@ class CheckedJob(models.Model):
 
     def __str__(self) -> str:
         return f"{self.project.code} {self.title}"
+
+
+class SystemSettings(models.Model):
+    """Company-wide settings kept in the database: who is alerted, and how long files are kept."""
+
+    alert_emails = models.TextField(
+        "send alerts to", blank=True,
+        help_text="One email address per line. Empty: every user who can change settings and has an email.",
+    )
+    working_files_days = models.PositiveIntegerField(
+        "keep working files for (days)", default=60,
+        help_text="Close-ups, change pictures and the saved reading of each drawing. They are made again if needed "
+        "(reading the drawing again takes a minute or two).",
+    )
+    replaced_days = models.PositiveIntegerField(
+        "remove replaced revisions after (days)", null=True, blank=True,
+        help_text="Drawings replaced by a later revision, with their files. Empty: keep them.",
+    )
+    tender_months = models.PositiveIntegerField(
+        "remove the files of tenders inactive for (months)", null=True, blank=True,
+        help_text="Drawings, Callidus files and uploads of tenders with no activity for this long. The tender, its "
+        "products and its figures stay. Tenders marked to keep are left alone. Empty: never.",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "system settings"
+        verbose_name_plural = "system settings"
+
+    @classmethod
+    def get(cls) -> "SystemSettings":
+        return cls.objects.first() or cls.objects.create()
+
+
+class BackupRun(models.Model):
+    started_at = models.DateTimeField(auto_now_add=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    ok = models.BooleanField(default=False)
+    target = models.CharField(max_length=300, blank=True)
+    database_bytes = models.BigIntegerField(default=0)
+    files_sent = models.PositiveIntegerField(default=0)
+    bytes_sent = models.BigIntegerField(default=0)
+    files_total = models.PositiveIntegerField(default=0)
+    error = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-started_at"]
+
+
+class Alert(models.Model):
+    """A problem the administrators were told about, so it is sent once (and
+    again every 12 hours while it lasts), and its end is reported."""
+
+    key = models.CharField(max_length=200, unique=True)
+    subject = models.CharField(max_length=300)
+    body = models.TextField(blank=True)
+    first_at = models.DateTimeField(auto_now_add=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-first_at"]
+
+
+class DeletionLog(models.Model):
+    what = models.CharField(max_length=300)
+    reason = models.CharField(max_length=100, help_text="by hand, or the retention rule that removed it")
+    bytes_freed = models.BigIntegerField(default=0)
+    by = models.ForeignKey("auth.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-at"]

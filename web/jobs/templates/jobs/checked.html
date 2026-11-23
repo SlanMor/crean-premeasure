@@ -25,7 +25,7 @@
   <table>
     <tr><th>Callidus job</th><th>Drawing</th><th class="num">Rooms</th><th class="num">Area m²</th><th class="num">Floor agreed</th><th class="num">Right first time</th><th class="num">Typical change</th><th>Uploaded</th></tr>
     {% for j in jobs %}
-    <tr><td>{% if j.comparison %}<a href="{% url 'checked_job' j.pk %}">{{ j.title }}</a>{% else %}{{ j.title }}{% endif %}<div class="tag">{{ j.upload.filename }}</div></td>
+    <tr><td>{% if j.comparison %}<a href="{% url 'checked_job' j.pk %}">{{ j.title }}</a>{% else %}{{ j.title }}{% endif %}<div class="tag">{% if j.upload %}{{ j.upload.filename }}{% else %}file cleaned up{% endif %}</div></td>
       <td>{% if j.premeasure %}<a href="{% url 'premeasure' j.premeasure.pk %}">{{ j.premeasure.title }}</a>{% else %}<span class="muted">not matched to a drawing</span>{% endif %}</td>
       <td class="num">{{ j.rooms }}</td><td class="num">{{ j.area_m2|floatformat:"2g" }}</td>
       <td class="num">{% if j.comparison %}{% widthratio j.comparison.outline_agreement 1 100 %}%{% else %}<span class="muted">-</span>{% endif %}</td>

@@ -41,6 +41,20 @@ services:
       - db
       - redis
 
+  scheduler:
+    # nightly backup (2am), clean-up (4am), and checks every 15 minutes that alert by email
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      MEDIA_ROOT: /data/media
+    command: python manage.py scheduler
+    volumes:
+      - media:/data/media
+    depends_on:
+      - db
+      - redis
+
   db:
     image: postgres:16
     restart: unless-stopped
