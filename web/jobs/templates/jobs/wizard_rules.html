@@ -26,7 +26,9 @@
   {% for field in form %}{% if field.name in "room_edge skirting_on_glazing threshold_strips nosings_separate room_splits lift_floors two_sheets" %}
     <div>{% include "jobs/_field.html" %}{% if field.name in applied %}<span class="pill ok">used now</span>{% endif %}</div>
   {% endif %}{% endfor %}
-  </div></details>
+  </div>
+  {% with field=form.other_rules %}{% include "jobs/_field.html" %}{% endwith %}
+  </details>
 </div>
 <p class="muted">Rules marked <span class="pill ok">used now</span> change what the software measures today; the others are recorded for the estimator and applied as they are built.</p>
 <button class="btn">Next: drawings</button>

@@ -30,6 +30,10 @@
   {% for field in form %}{% if field.name|slice:":8" == "wastage_" %}{% include "jobs/_field.html" %}{% endif %}{% endfor %}
   </div>
 </div>
+<div class="card">
+  <h2>Other rules</h2>
+  {% with field=form.other_rules %}{% include "jobs/_field.html" %}{% endwith %}
+</div>
 <button class="btn">Save rules</button>
 </form>
 {% if not company and own %}

@@ -110,6 +110,7 @@ class TenderQuestionsForm(forms.ModelForm):
     class Meta:
         model = MeasuringRules
         exclude = ["project", "updated_at"]
+        widgets = {"other_rules": forms.Textarea(attrs={"rows": 8})}
 
 
 class RoomCheckForm(forms.Form):
@@ -314,6 +315,7 @@ class RulesForm(forms.ModelForm):
     class Meta:
         model = MeasuringRules
         exclude = ["project", "updated_at"]
+        widgets = {"other_rules": forms.Textarea(attrs={"rows": 8})}
 
 
 class TemplateForm(forms.ModelForm):

@@ -402,9 +402,10 @@ def tender_workbook(project: Project) -> bytes:
     for product in sorted(per_product):
         row = per_product[product]
         net = sum(row["by"].values())
-        pct = wastage.get(product, 0.0)
+        pct = wastage.get(product)  # None: not set, shown as such and never as 0%
         ws.append([product, LibraryProduct.Type(types[product]).label if product in types else "", row["unit"],
-                   round(net, 2), round(row["check"], 2), pct, round(net * (1 + pct / 100), 2)]
+                   round(net, 2), round(row["check"], 2), "not set" if pct is None else pct,
+                   None if pct is None else round(net * (1 + pct / 100), 2)]
                   + [round(row["by"].get(n, 0), 2) or None for n in names])
 
     rs = wb.create_sheet("Rooms")
