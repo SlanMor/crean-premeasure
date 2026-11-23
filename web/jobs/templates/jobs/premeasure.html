@@ -97,6 +97,8 @@
   Sheet {{ pm.summary.picture.sheet }} ({{ pm.summary.picture.sources.sheet }}), scale 1:{{ pm.summary.scale|floatformat:"0" }} ({{ pm.summary.picture.sources.scale }}).
   {% if pm.summary.picture.agrees %}Room areas printed on the drawing agree to within {{ pm.summary.picture.printed_areas.off }}% over {{ pm.summary.picture.printed_areas.rooms }} rooms.{% elif pm.summary.picture.printed_areas.ratio %}<b>Room areas printed on the drawing differ from those measured by {{ pm.summary.picture.printed_areas.off }}% over {{ pm.summary.picture.printed_areas.rooms }} rooms: check the sheet size and scale, then read it again.</b>{% else %}The room areas printed on the drawing could not be read to check the scale, so check one known dimension in Callidus.{% endif %}
   {% if pm.summary.picture.unclear_codes %}Finish codes unclear on the picture: {{ pm.summary.picture.unclear_codes|join:", " }}.{% endif %}
+  {% if pm.summary.picture.colour_twins %}The legend uses one colour for more than one finish ({% for g in pm.summary.picture.colour_twins %}{{ g|join:" and " }}{% if not forloop.last %}; {% endif %}{% endfor %}, often one hatched): those areas are marked to check.{% endif %}
+  {% if not pm.summary.rooms %}<b>No floor in the legend's colours was found on this drawing.</b> {% if pm.summary.unknown_fills %}The coloured areas found are listed below as not in the legend.{% endif %}{% endif %}
   The architect's own PDF export gives exact areas: ask for it if you can.</p>
   {% endif %}
   {% if pm.summary.manual_finishes %}
