@@ -1,12 +1,13 @@
 {% extends "jobs/base.html" %}
-{% block title %}{{ project.code }} · Crean pre-measure{% if user.is_staff %}<p class="muted" style="text-align:right">{% if project.files_removed_at %}Files removed {{ project.files_removed_at|date:"j M Y" }}. {% endif %}{% if project.keep_files %}Files kept, never cleaned up. {% endif %}<a href="{% url 'delete_tender' project.pk %}">Delete this tender or its files</a></p>{% endif %}
-{% endblock %}
+{% block title %}{{ project.code }} · Crean pre-measure{% endblock %}
 {% block content %}
 <p class="muted"><a href="{% url 'home' %}">Tenders</a></p>
 <div class="head"><div>
 <h1>{{ project.code }} {{ project.name }}</h1>
 <p class="sub">{% if project.client %}{{ project.client }}{% endif %}{% if project.main_contractor %} · {{ project.main_contractor }}{% endif %}{% if project.architect %} · architect {{ project.architect }}{% endif %}{% if project.site %} · {{ project.site }}{% endif %}{% if project.due %} · due {{ project.due|date:"j M Y" }}{% endif %}
- · <a href="{% url 'project_edit' project.pk %}">edit</a></p></div></div>
+ · <a href="{% url 'project_edit' project.pk %}">edit</a></p>
+{% if project.files_removed_at or project.keep_files %}<p class="muted">{% if project.files_removed_at %}Files removed {{ project.files_removed_at|date:"j M Y" }}. {% endif %}{% if project.keep_files %}Files kept: never cleaned up.{% endif %}</p>{% endif %}</div>
+{% if user.is_staff %}<div class="actions"><a class="btn secondary" href="{% url 'delete_tender' project.pk %}">Delete tender</a></div>{% endif %}</div>
 
 <div class="card">
   <h2>To do</h2>

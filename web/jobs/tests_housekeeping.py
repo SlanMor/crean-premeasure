@@ -171,6 +171,30 @@ class DeleteTest(Base):
         self.client.post(reverse("delete_tender", args=[p.pk]), {"code": "T9", "what": "all"})
         self.assertFalse(Project.objects.filter(pk=p.pk).exists())
 
+    def test_deleting_a_tender_leaves_no_file_behind(self):
+        from .models import CheckedJob
+        from .tender import zoom_page_path
+
+        p = Project.objects.create(code="T7", name="t")
+        a = self.drawing(p, "A P1.pdf")
+        b = self.drawing(p, "A P2.pdf", supersedes=a)
+        b.changes.save("c.png", SimpleUploadedFile("c.png", b"c" * 50))
+        b.output.save("o.zip", SimpleUploadedFile("o.zip", b"z" * 50))
+        zoom = zoom_page_path(b)
+        zoom.parent.mkdir(parents=True, exist_ok=True)
+        zoom.write_bytes(b"jpg")
+        est = Upload.objects.create(project=p, kind=Upload.Kind.CALLIDUS_EST, file=SimpleUploadedFile("j.est", b"e" * 50))
+        CheckedJob.objects.create(project=p, premeasure=b, upload=est, title="x")
+        before = [f for f in Path(self.media).rglob("*") if f.is_file()]
+        self.assertGreaterEqual(len(before), 9)
+        page = self.client.get(reverse("project", args=[p.pk]))
+        self.assertContains(page, "Delete tender")
+        self.assertContains(page, "<title>T7 · Crean pre-measure</title>", html=False)
+        r = self.client.post(reverse("delete_tender", args=[p.pk]), {"code": "T7", "what": "all"})
+        self.assertRedirects(r, reverse("home"))
+        self.assertEqual([f for f in Path(self.media).rglob("*") if f.is_file()], [])
+        self.assertFalse(Upload.objects.exists() or Premeasure.objects.exists() or CheckedJob.objects.exists())
+
     def test_tender_deletion_is_for_administrators(self):
         p = Project.objects.create(code="T", name="t")
         self.client.force_login(User.objects.create_user("est"))
