@@ -121,6 +121,11 @@ def analyse_premeasure(pk: int) -> None:
         pm.summary["preview_for"] = sorted(pm.finish_products)
         pm.status = Premeasure.Status.REVIEW
         pm.save()
+        # rooms are numbered afresh on every reading, so earlier checks no longer apply
+        pm.checks.all().delete()
+        from .tender import zoom_page_path
+
+        zoom_page_path(pm).unlink(missing_ok=True)
     except Exception as exc:
         _fail(pm, exc)
         _batch_progress(pm)
@@ -242,6 +247,7 @@ def background_template(pm: Premeasure) -> Path:
 
 
 def write_premeasure(pk: int) -> None:
+    from django.utils import timezone
     from premeasure_engine.premeasure import render_preview, write_outputs
 
     pm = Premeasure.objects.select_related("drawing", "starter", "project").get(pk=pk)
@@ -251,7 +257,9 @@ def write_premeasure(pk: int) -> None:
         new, problems = new_products_for(chosen, job)
         if problems:
             raise ValueError("; ".join(problems))
-        a = _analysis(pm)
+        from premeasure_engine.premeasure import apply_checks
+
+        a, by_hand = apply_checks(_analysis(pm), {c.room_id: c.decision for c in pm.checks.all()})
         template = background_template(pm)
         name = safe_name(pm.title)
         with tempfile.TemporaryDirectory() as tmp:
@@ -273,6 +281,9 @@ def write_premeasure(pk: int) -> None:
             "left_out_m2": round(sum(r.area for r in out.left_out), 2),
             "new_products": [p.name for p in new],
             "built_on": job.label,
+            "by_hand_rooms": len(by_hand),
+            "by_hand_m2": round(sum(r.area for r in by_hand), 2),
+            "at": timezone.now().isoformat(),
         }
         pm.status, pm.error = Premeasure.Status.DONE, ""
         pm.save()

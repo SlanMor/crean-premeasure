@@ -61,12 +61,13 @@ class PagesTest(TestCase):
                              {"username": "est", "email": "est@crean.ie", "is_active": "on"})
         self.assertContains(r, "cannot remove your own access")
 
-    def test_add_project_starts_with_its_products(self):
+    def test_new_tender_starts_the_set_up(self):
         self.client.force_login(self.user)
-        r = self.client.post(reverse("home"), {"code": "C123", "name": "Cashel school"})
+        self.assertContains(self.client.get(reverse("home")), "New tender")
+        r = self.client.post(reverse("new_tender"), {"code": "C123", "name": "Cashel school"})
         p = Project.objects.get(code="C123")
-        self.assertRedirects(r, reverse("setup", args=[p.pk]))
-        self.assertContains(self.client.get(r.url), "Products for this project")
+        self.assertRedirects(r, reverse("wizard", args=[p.pk, "rules"]))
+        self.assertContains(self.client.get(r.url), "Tender questions")
 
     def test_new_product_from_a_setup_row_is_added_to_the_list_and_chosen(self):
         self.client.force_login(self.user)

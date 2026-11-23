@@ -8,11 +8,48 @@ schedules follow in later phases.
 from django.db import models
 
 
+class Company(models.Model):
+    """A client, main contractor or architect, kept once and picked from a list."""
+
+    class Kind(models.TextChoices):
+        CLIENT = "client", "Client"
+        CONTRACTOR = "contractor", "Main contractor"
+        ARCHITECT = "architect", "Architect"
+
+    kind = models.CharField(max_length=20, choices=Kind.choices)
+    name = models.CharField(max_length=200)
+    contact_name = models.CharField("contact", max_length=200, blank=True)
+    email = models.EmailField(blank=True)
+    phone = models.CharField(max_length=50, blank=True)
+    notes = models.TextField(blank=True, help_text="For example how they lay out their drawings, or who to ask.")
+    active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["kind", "name"]
+        verbose_name_plural = "companies"
+        constraints = [models.UniqueConstraint(fields=["kind", "name"], name="one_company_per_kind")]
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class Project(models.Model):
+    class Step(models.TextChoices):
+        RULES = "rules", "Tender questions"
+        DRAWINGS = "drawings", "Drawings"
+        PRODUCTS = "products", "Products"
+        DONE = "done", "Set up"
+
     code = models.CharField("project ID", max_length=50, unique=True)
     name = models.CharField(max_length=200)
-    client = models.CharField(max_length=200, blank=True)
-    main_contractor = models.CharField(max_length=200, blank=True)
+    client = models.ForeignKey(Company, on_delete=models.PROTECT, null=True, blank=True, related_name="client_of",
+                               limit_choices_to={"kind": "client"})
+    main_contractor = models.ForeignKey(Company, on_delete=models.PROTECT, null=True, blank=True,
+                                        related_name="contractor_of", limit_choices_to={"kind": "contractor"})
+    architect = models.ForeignKey(Company, on_delete=models.PROTECT, null=True, blank=True,
+                                  related_name="architect_of", limit_choices_to={"kind": "architect"})
+    due = models.DateField("tender due", null=True, blank=True)
     site = models.CharField(max_length=300, blank=True)
     room_naming = models.CharField(
         max_length=200, blank=True, help_text="Room naming convention, for example 'code then name'."
@@ -22,6 +59,7 @@ class Project(models.Model):
         "LibraryProduct", blank=True, related_name="shortlisted_in",
         help_text="Products from the list this tender uses, shown first wherever a product is chosen.",
     )
+    setup_step = models.CharField(max_length=20, choices=Step.choices, default=Step.DONE)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -388,3 +426,23 @@ class MeasuringRules(models.Model):
 
     def wastage_for(self, product_type: str):
         return getattr(self, f"wastage_{product_type}", 0)
+
+
+class RoomCheck(models.Model):
+    """The estimator's decision on one room of a drawing (by its number in the
+    drawing's summary). Cleared when the drawing is read again."""
+
+    class Decision(models.TextChoices):
+        OK = "ok", "Outline right"
+        BY_HAND = "by_hand", "Wrong: measure by hand"
+
+    premeasure = models.ForeignKey(Premeasure, on_delete=models.CASCADE, related_name="checks")
+    room_id = models.PositiveIntegerField()
+    decision = models.CharField(max_length=10, choices=Decision.choices)
+    note = models.CharField(max_length=300, blank=True, help_text="What was wrong, so the software can learn.")
+    by = models.ForeignKey("auth.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["premeasure", "room_id"]
+        constraints = [models.UniqueConstraint(fields=["premeasure", "room_id"], name="one_check_per_room")]

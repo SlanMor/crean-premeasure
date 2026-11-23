@@ -1,0 +1,8 @@
+{% if todo %}
+<ul class="todo">
+  {% for t in todo %}
+  <li class="{{ t.level }}"><span class="dot"></span><span class="text">{{ t.text }}</span>
+    {% if t.button %}{% if t.post %}<form method="post" action="{{ t.url }}">{% csrf_token %}<button class="btn small{% if not forloop.first %} secondary{% endif %}">{{ t.button }}</button></form>{% else %}<a class="btn small{% if not forloop.first %} secondary{% endif %}" href="{{ t.url }}">{{ t.button }}</a>{% endif %}{% endif %}</li>
+  {% endfor %}
+</ul>
+{% else %}<div class="alldone">Nothing left to do. Every drawing is written and checked.</div>{% endif %}

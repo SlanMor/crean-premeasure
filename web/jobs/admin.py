@@ -1,5 +1,6 @@
 from django.contrib import admin, messages
 
+from . import models
 from .models import BackgroundTemplate, Batch, Job, LibraryProduct, Level, MeasuringRules, Premeasure, Product, Project, Upload
 from .queue import get_queue
 
@@ -17,7 +18,7 @@ class ProductInline(admin.TabularInline):
 @admin.register(Project)
 class ProjectAdmin(admin.ModelAdmin):
     list_display = ("code", "name", "client", "main_contractor", "created_at")
-    search_fields = ("code", "name", "client")
+    search_fields = ("code", "name", "client__name")
     inlines = [LevelInline, ProductInline]
 
 
@@ -89,3 +90,16 @@ class LibraryProductAdmin(admin.ModelAdmin):
 
 admin.site.register(MeasuringRules)
 admin.site.register(Batch)
+
+
+@admin.register(models.Company)
+class CompanyAdmin(admin.ModelAdmin):
+    list_display = ("name", "kind", "contact_name", "email", "active")
+    list_filter = ("kind", "active")
+    search_fields = ("name", "contact_name")
+
+
+@admin.register(models.RoomCheck)
+class RoomCheckAdmin(admin.ModelAdmin):
+    list_display = ("premeasure", "room_id", "decision", "note", "by", "at")
+    list_filter = ("decision",)

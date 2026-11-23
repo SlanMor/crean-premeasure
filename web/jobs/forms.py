@@ -5,7 +5,7 @@ from django import forms
 
 from django.contrib.auth.models import User
 
-from .models import BackgroundTemplate, Batch, LibraryProduct, MeasuringRules, Product, Project, Upload
+from .models import BackgroundTemplate, Company, LibraryProduct, MeasuringRules, Product, Project, RoomCheck
 
 
 def _check_file(upload, suffix: str, check) -> None:
@@ -27,11 +27,94 @@ def _check_file(upload, suffix: str, check) -> None:
 SHEET_CHOICES = [("", "Read from the drawing")] + [(x, x) for x in ("A0", "A1", "A2", "A3", "A4")]
 
 
+NEW = "__new__"
+
+
+class CompanyChoice(forms.ChoiceField):
+    """A company of one kind from the list, or a new one typed in next to it."""
+
+    def __init__(self, kind: str, label: str, **kwargs):
+        self.kind = kind
+        super().__init__(label=label, required=False, choices=self._choices, **kwargs)
+
+    def _choices(self):
+        return ([("", "Not set")]
+                + [(str(c.pk), c.name) for c in Company.objects.filter(kind=self.kind, active=True)]
+                + [(NEW, f"Add a new {Company.Kind(self.kind).label.lower()}...")])
+
+
 class ProjectForm(forms.ModelForm):
+    """Tender details, with the client, main contractor and architect picked from
+    the company list (or added to it here)."""
+
+    client = CompanyChoice("client", "Client")
+    client_new = forms.CharField(label="New client", max_length=200, required=False)
+    main_contractor = CompanyChoice("contractor", "Main contractor")
+    main_contractor_new = forms.CharField(label="New main contractor", max_length=200, required=False)
+    architect = CompanyChoice("architect", "Architect")
+    architect_new = forms.CharField(label="New architect", max_length=200, required=False)
+
+    PICKERS = (("client", "client"), ("main_contractor", "contractor"), ("architect", "architect"))
+
     class Meta:
         model = Project
-        fields = ["code", "name", "client", "main_contractor", "site", "notes"]
+        fields = ["code", "name", "site", "due", "notes"]
+        widgets = {"notes": forms.Textarea(attrs={"rows": 3}), "due": forms.DateInput(attrs={"type": "date"})}
+        labels = {"code": "Project ID", "name": "Project name"}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field, _ in self.PICKERS:
+            co = getattr(self.instance, field, None) if self.instance.pk else None
+            if co is not None:
+                self.initial[field] = str(co.pk)
+
+    def clean(self):
+        data = super().clean()
+        for field, kind in self.PICKERS:
+            choice, typed = data.get(field) or "", (data.get(f"{field}_new") or "").strip()
+            if choice == NEW and not typed:
+                self.add_error(f"{field}_new", "Type the name.")
+            elif choice == NEW:
+                data[field] = ("new", kind, typed)
+            elif choice:
+                data[field] = Company.objects.filter(pk=int(choice), kind=kind).first()
+            else:
+                data[field] = None
+        return data
+
+    def save(self, commit=True):
+        project = super().save(commit=False)
+        for field, _ in self.PICKERS:
+            value = self.cleaned_data.get(field)
+            if isinstance(value, tuple):
+                existing = Company.objects.filter(kind=value[1], name__iexact=value[2]).first()
+                value = existing or Company.objects.create(kind=value[1], name=value[2])
+            setattr(project, field, value)
+        if commit:
+            project.save()
+            self.save_m2m()
+        return project
+
+
+class CompanyForm(forms.ModelForm):
+    class Meta:
+        model = Company
+        fields = ["kind", "name", "contact_name", "email", "phone", "notes", "active"]
         widgets = {"notes": forms.Textarea(attrs={"rows": 3})}
+
+
+class TenderQuestionsForm(forms.ModelForm):
+    """The measuring rules, started from the company's: change only what this tender does differently."""
+
+    class Meta:
+        model = MeasuringRules
+        exclude = ["project", "updated_at"]
+
+
+class RoomCheckForm(forms.Form):
+    decision = forms.ChoiceField(choices=RoomCheck.Decision.choices)
+    note = forms.CharField(max_length=300, required=False)
 
 
 class StarterForm(forms.Form):

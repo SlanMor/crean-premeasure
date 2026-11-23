@@ -1,17 +1,21 @@
 {% extends "jobs/base.html" %}
 {% block content %}
-<h1>Projects</h1>
-<p class="sub">Pick a project, add its finishes drawings, and download pre-measured Callidus files.</p>
+<div class="head"><div><h1>Tenders</h1>
+<p class="sub">Each tender: its drawings, products and Callidus files.</p></div>
+<div class="actions"><a class="btn" href="{% url 'new_tender' %}">New tender</a></div></div>
 <div class="card">
   {% if projects %}
   <table>
-    <tr><th>Code</th><th>Name</th><th>Client</th><th class="num">Drawings</th></tr>
+    <tr><th>Project</th><th>Client</th><th>Main contractor</th><th>Due</th><th class="num">Drawings</th><th></th></tr>
     {% for p in projects %}
-    <tr><td><a href="{% url 'project' p.pk %}">{{ p.code }}</a></td><td>{{ p.name }}</td><td>{{ p.client }}</td>
-        <td class="num">{{ p.premeasures.count }}</td></tr>
+    <tr><td><a href="{% url 'project' p.pk %}"><b>{{ p.code }}</b> {{ p.name }}</a></td>
+        <td>{{ p.client|default:"" }}</td><td>{{ p.main_contractor|default:"" }}</td>
+        <td>{% if p.due %}{{ p.due|date:"j M Y" }}{% endif %}</td>
+        <td class="num">{{ p.n_drawings }}</td>
+        <td>{% if p.setup_step != "done" %}<a class="pill warn" href="{% url 'wizard' p.pk p.setup_step %}">Setting up</a>{% endif %}</td></tr>
     {% endfor %}
   </table>
-  {% else %}<p class="muted">No projects yet. Add the first one below.</p>{% endif %}
+  {% else %}<p>No tenders yet.</p><p><a class="btn" href="{% url 'new_tender' %}">Set up the first tender</a></p>{% endif %}
 </div>
 {% if recent %}
 <div class="card">
@@ -24,14 +28,4 @@
   </table>
 </div>
 {% endif %}
-<div class="card">
-  <h2>New project</h2>
-  <form method="post">{% csrf_token %}
-    <div class="grid">
-      {% for field in form %}{% if field.name != "notes" %}{% include "jobs/_field.html" %}{% endif %}{% endfor %}
-    </div>
-    {% with field=form.notes %}{% include "jobs/_field.html" %}{% endwith %}
-    <button class="btn">Add project</button>
-  </form>
-</div>
 {% endblock %}

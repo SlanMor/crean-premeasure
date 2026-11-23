@@ -1,0 +1,10 @@
+{% extends "jobs/base.html" %}
+{% block title %}{{ project.code }} run · Crean pre-measure{% endblock %}
+{% block content %}
+<p class="muted"><a href="{% url 'project' project.pk %}">{{ project.code }} {{ project.name }}</a></p>
+<h1>Run</h1>
+<p class="sub">Finish the set-up. Every drawing whose finishes all have a product is written to Callidus now; the rest wait on the tender's to-do list.</p>
+{% include "jobs/_wizard_steps.html" %}
+<div class="card"><h2>Where the tender stands</h2>{% include "jobs/_todo.html" %}</div>
+<form method="post">{% csrf_token %}<button class="btn">Finish set-up and write the ready drawings</button></form>
+{% endblock %}

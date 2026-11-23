@@ -1,0 +1,26 @@
+{% extends "jobs/base.html" %}
+{% block title %}{{ project.code }} drawings · Crean pre-measure{% endblock %}
+{% block content %}
+<p class="muted"><a href="{% url 'project' project.pk %}">{{ project.code }} {{ project.name }}</a></p>
+<h1>Drawings</h1>
+<p class="sub">Drop in the whole drawing pack. In a PDF with many pages, only the pages that look like finishes plans are read. Reading starts straight away and carries on while you choose products in the next step.</p>
+{% include "jobs/_wizard_steps.html" %}
+{% if not job %}<p class="note">There is no Callidus job to build on yet. {% if user.is_staff %}Add it in <a href="{% url 'settings_template' %}">Settings, Callidus template</a> first.{% else %}Ask the administrator to add the house Callidus template first.{% endif %}</p>{% endif %}
+<form method="post" enctype="multipart/form-data" class="card">{% csrf_token %}
+  {% with field=form.drawings %}{% include "jobs/_field.html" %}{% endwith %}
+  <details><summary class="muted">Level, revision, scale or sheet size (usually read from the drawing)</summary>
+  <div class="form-grid" style="margin-top:12px">
+    {% with field=form.level %}{% include "jobs/_field.html" %}{% endwith %}
+    {% with field=form.revision %}{% include "jobs/_field.html" %}{% endwith %}
+    {% with field=form.scale %}{% include "jobs/_field.html" %}{% endwith %}
+    {% with field=form.sheet %}{% include "jobs/_field.html" %}{% endwith %}
+  </div></details>
+  {% with field=form.notify %}{% include "jobs/_field.html" %}{% endwith %}
+  <button class="btn">Read them, next: products</button>
+  {% if drawings %}<button class="btn secondary" name="skip" value="1" formnovalidate style="margin-left:8px">Next: products</button>{% endif %}
+</form>
+{% if drawings %}
+<div class="card"><h2>Already added</h2>
+<table>{% for pm in drawings %}<tr><td><a href="{% url 'premeasure' pm.pk %}">{{ pm.title }}</a></td><td>{% include "jobs/_status.html" %}</td></tr>{% endfor %}</table></div>
+{% endif %}
+{% endblock %}

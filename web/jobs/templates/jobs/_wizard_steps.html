@@ -1,0 +1,3 @@
+{% if steps %}<nav class="wizard" aria-label="Tender set-up">
+  {% for s in steps %}{% if s.url and not s.current and s.done %}<a class="{% if s.done %}done{% endif %}" href="{{ s.url }}"><span class="n">{% if s.done %}&#10003;{% else %}{{ s.n }}{% endif %}</span>{{ s.label }}</a>{% else %}<span class="{% if s.current %}current{% elif s.done %}done{% endif %}"><span class="n">{% if s.done and not s.current %}&#10003;{% else %}{{ s.n }}{% endif %}</span>{{ s.label }}</span>{% endif %}{% endfor %}
+</nav>{% endif %}

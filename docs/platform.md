@@ -1,12 +1,14 @@
 # Using the platform
 
-How an estimator turns finishes drawings into pre-measured Callidus jobs, and the one-off set-up an administrator does first. Everything is in the site itself: Projects, Products and (for administrators) Settings. The Django admin at /admin/ is only a technical back door.
+How an estimator turns finishes drawings into pre-measured Callidus jobs, and the one-off set-up an administrator does first. Everything is in the site itself: Tenders, Products and (for administrators) Settings. The Django admin at /admin/ is only a technical back door.
 
 ## Settings (administrators, once)
 
 - **Callidus template.** A Crean Callidus job (`.est`) and a background (`.CalBack`) with one sheet. Cashel's pair will do. New files are built on the job when a project has no Callidus job of its own, and new products copy Callidus's roll settings from its products. It needs at least one sheet product and one coved skirting.
 - **Measuring rules.** How Crean measures: room edge, glazing, doorways, smallest opening deducted, furniture, stairs, room splits, coving notes, lifts, floors on two sheets, and wastage by product type. Rules marked "used now" already change the output (smallest opening, wastage). The others are recorded and applied as they are built. A project can set its own rules; otherwise it follows these.
 - **Users.** Add each estimator. "Can change settings" gives access to this area.
+- **Clients and contractors.** Clients, main contractors and architects, with a contact and email. They are picked from a list when a tender is set up, and a new one typed in there is added here. The architect's email fills in the queries email.
+- **Rooms marked wrong.** Every room an estimator said was wrong while checking, with their note: where the reading needs work.
 
 ## Products (everyone)
 
@@ -14,13 +16,25 @@ Crean's product list, shared by every project. Each product has its name as it a
 
 When a product is not already in the Callidus job a file is built on, the platform adds it to the Callidus file, copying Callidus's own roll settings from a product of the same type in the template. Tile and carpet tile products cannot be added this way yet: they must be in the Callidus template or an imported job.
 
-## For each project
+## For each tender
 
-1. **Add the project.** You go straight to its products.
-2. **Products for this project.** Pick the products this tender uses from the master list ("Add products from the list"); they are shown first wherever a product is chosen. Then one row per finish code on the drawings, with the product it uses. Fill it in from a drawing's legend in one click (products in the list that clearly match are chosen for you), choose from the list, or add new products. Importing a Callidus job adds its products to the list, matches them to finish codes by product number or colour name (not by the contractor's own codes), and makes that job the one the project's files are built on.
-3. **Measuring rules** (optional): set them for this project if it differs from the company rules.
-4. **Add finishes drawings,** one or many at a time. A PDF with several pages is fine: each page with a scale and the word "finish" is read, and other pages are skipped. Drawings are read one after another in the background (one to three minutes each). Tick "Write the Callidus files automatically" and every drawing whose finishes all have a product is written without waiting; the rest wait for review. Tick "Email me" for an email when the whole batch is done.
-5. **Review a drawing** where needed: the picture of the rooms found, each legend finish with its product (change one for this drawing only), and the areas with their status and reasons. Write, then download the zip. A product chosen on a drawing for a code the project has no product for is added to the project's products when you press Save products or write, so the next drawing gets it. A drawing always shows the project's products as they are now, even after it has been written, except where a different product was chosen on that drawing. If they have changed since the files were written, the page says so: write again to update the files.
+**New tender** (top right) walks through five steps. Any step can be revisited, and a tender left half set up shows "Setting up" in the list.
+
+1. **Tender details.** Project ID and name, then the client, main contractor and architect from the list (or "Add a new..." to type one in), site and due date.
+2. **Tender questions.** The measuring rules, starting from the company's. Change only what this tender does differently; they are saved as the tender's own only if something differs.
+3. **Drawings.** Drop in the whole pack. In a PDF with several pages, only pages with a scale and the word "finish" are read. Reading starts at once and carries on in the background (one to three minutes a drawing).
+4. **Products.** Every finish code on the tender's drawings, once, with what each legend says, how many drawings use it and the area found. Products are suggested where one in the list clearly matches, or where an earlier tender with the same architect (or client) gave the same code with the same legend text. A code that means different things on different drawings is marked "differs". Pick the tender's products from the list too; they are shown first in every product choice.
+5. **Run.** Every drawing whose finishes all have a product is written to Callidus, and the tender's to-do list takes over.
+
+**The tender page** leads with its to-do list: drawings that need a scale or sheet size, codes with no product, rooms to check, drawings ready to write (or written before the latest changes), each with one button. Below it: queries for the architect and the tender's quantities.
+
+**Checking rooms.** "Check rooms" shows one room at a time, biggest first, zoomed on the drawing with its outline. Press 1 (or the green button) if it is right: it is no longer marked "CHECK - ". Press 2 if it is wrong, with a note if you like: it is left out of Callidus and listed to measure by hand. S skips. Reading a drawing again numbers its rooms afresh, so its checks are cleared.
+
+**Queries for the architect.** Gathered from every drawing: scans instead of exports, codes not legible on a scan, codes on the plan but not in the legend, coloured areas the legend does not explain, finishes shown by hatching only, and codes described differently on different drawings. Untick any, then "Open in my email" or copy the message.
+
+**Tender quantities.** One spreadsheet: each product's net quantity, how much of it is still to check, wastage and quantity with wastage, split by drawing; every room with its state; and everything still to measure by hand.
+
+**A single drawing** can still be reviewed on its own page: the picture of the rooms found, each legend finish with its product (change one for this drawing only), and the areas with their status. Its "Next" bar says what is left. A product chosen on a drawing for a code the tender has no product for is added to the tender's products. A drawing always follows the tender's products as they are now, except where a different product was chosen on it; if products or room checks change after the files were written, it says to write again.
 
 **Scanned drawings.** A PDF that is only a picture of the drawing (scanned, or saved as an image) is measured from its colours instead. It needs the sheet size (A0, A1...) and the scale. Both are read from the title block when they are printed there; otherwise the drawing stops and asks for them (or give the sheet size when uploading). Every room from a picture is marked "CHECK - ", room names are often missing, and the review page says where the sheet size and scale came from. Areas on simulated scans came within 1 to 3% of the vector reading for most rooms. The architect's own PDF export is exact: ask for it whenever you can.
 

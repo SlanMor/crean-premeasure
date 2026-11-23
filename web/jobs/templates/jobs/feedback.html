@@ -1,0 +1,20 @@
+{% extends "jobs/base.html" %}
+{% block title %}Rooms marked wrong · Crean pre-measure{% endblock %}
+{% block content %}
+<p class="muted"><a href="{% url 'settings' %}">Settings</a></p>
+<h1>Rooms marked wrong</h1>
+<p class="sub">Every room an estimator said was wrong while checking, with their note. This is where the reading needs work.</p>
+<div class="card">
+  {% if rows %}
+  <table>
+    <tr><th>When</th><th>Tender</th><th>Drawing</th><th>Room</th><th class="num">Area m²</th><th>Note</th><th>By</th></tr>
+    {% for c, r in rows %}
+    <tr><td class="muted">{{ c.at|date:"j M Y" }}</td><td>{{ c.premeasure.project.code }}</td>
+      <td><a href="{% url 'check' c.premeasure.pk %}?room={{ c.room_id }}">{{ c.premeasure.title }}</a></td>
+      <td>{{ r.label|default:"(no room tag)" }}<div class="reasons">{{ r.reasons|join:"; " }}</div></td>
+      <td class="num">{{ r.area_m2|floatformat:"2g" }}</td><td>{{ c.note }}</td><td class="muted">{{ c.by.get_full_name|default:c.by.username }}</td></tr>
+    {% endfor %}
+  </table>
+  {% else %}<p class="muted">None yet.</p>{% endif %}
+</div>
+{% endblock %}
