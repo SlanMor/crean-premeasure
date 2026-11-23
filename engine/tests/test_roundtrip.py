@@ -95,6 +95,9 @@ def test_cashel_p3_shared_colours_are_measured_and_flagged(tmp_path):
     shared = {f.code: f for f in a.finishes if " or " in f.code}
     assert set(shared) == {"FF7 or FF11", "FF8 or FF10"}
     assert sum(f.amount for f in shared.values()) > 600
+    assert all(f.suggestion is None for f in shared.values())  # never a guessed product
+    assert {f.code: f.suggestion for f in a.finishes if f.code in ("FF7", "FF13")} == {
+        "FF7": "FF11 - Forbo Marmoleum Walton Rosemary Green 335535", "FF13": "FF7 - Forbo Marmoleum Fresco sage 3891"}
     for r in a.rooms:
         if r.finish is not None and " or " in r.finish.code:
             assert r.status != "Verified" and any("same colour" in why for why in r.reasons)
