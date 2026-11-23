@@ -396,11 +396,17 @@ class MeasuringRules(models.Model):
     GLAZING = [("", "Not decided yet"), ("glass_line", "Glass line"), ("inside_frame", "Inside of the frame")]
     DOORWAYS = [("", "Not decided yet"), ("centre", "Centre of the door"), ("under_door", "Under the door to the far face"),
                 ("frame", "Stop at the frame")]
-    FURNITURE = [("", "Not decided yet"), ("under", "Floor runs under"), ("plinth", "Stop at the plinth")]
-    STAIRS = [("", "Not decided yet"), ("plan", "Plan area"), ("treads", "Landings plus treads and risers")]
+    FURNITURE = [("", "Not decided yet"), ("under", "Floor runs under"), ("plinth", "Stop at the plinth"),
+                 ("kicker_100", "100 mm in from the kick board")]
+    STAIRS = [("", "Not decided yet"), ("plan", "Plan area"), ("treads", "Landings plus treads and risers"),
+              ("treads_lm", "Landings by area; treads and risers by linear metre, added by hand")]
     SPLITS = [("", "Not decided yet"), ("continuous", "One area per continuous floor"),
-              ("by_tag", "Split at each room tag")]
-    COVING = [("", "Not decided yet"), ("note", "Follow the note"), ("plan", "Follow the plan")]
+              ("by_tag", "Split at each room tag"),
+              ("by_tag_doors", "Split at each room tag, and corridors at doorways")]
+    COVING = [("", "Not decided yet"), ("note", "Follow the note"), ("plan", "Follow the plan"),
+              ("schedule", "Follow the finishes schedule; query the main contractor if unclear")]
+    LIFTS = [("", "Not decided yet"), ("once", "Yes, once, on one floor"), ("each", "Yes, on every floor"),
+             ("no", "No")]
     SHEETS = [("", "Not decided yet"), ("one", "One Callidus file"), ("separate", "One file per sheet")]
     YES_NO = [("", "Not decided yet"), ("yes", "Yes"), ("no", "No")]
 
@@ -412,7 +418,7 @@ class MeasuringRules(models.Model):
     threshold_strips = models.CharField("threshold strip at every change of finish", max_length=5, choices=YES_NO,
                                         blank=True)
     min_opening_m2 = models.DecimalField(
-        "smallest opening deducted (m²)", max_digits=5, decimal_places=2, default=2,
+        "smallest opening deducted (m²)", max_digits=5, decimal_places=2, default=0.5,
         help_text="Columns, risers or ducts smaller than this are measured through.",
     )
     furniture = models.CharField("fixed furniture and kitchen units", max_length=20, choices=FURNITURE, blank=True)
@@ -420,14 +426,23 @@ class MeasuringRules(models.Model):
     nosings_separate = models.CharField("nosings priced separately", max_length=5, choices=YES_NO, blank=True)
     room_splits = models.CharField("room splits", max_length=20, choices=SPLITS, blank=True)
     coving_notes = models.CharField("coving note on the drawing vs the plan", max_length=20, choices=COVING, blank=True)
-    lift_floors = models.CharField("add a floor for each lift car", max_length=5, choices=YES_NO, blank=True)
+    lift_floors = models.CharField("add a floor for each lift car", max_length=5, choices=LIFTS, blank=True)
     two_sheets = models.CharField("a floor drawn on two sheets", max_length=20, choices=SHEETS, blank=True)
-    wastage_sheet = models.DecimalField("sheet wastage (%)", max_digits=5, decimal_places=1, default=0)
-    wastage_tile = models.DecimalField("tile wastage (%)", max_digits=5, decimal_places=1, default=0)
-    wastage_carpet_tile = models.DecimalField("carpet tile wastage (%)", max_digits=5, decimal_places=1, default=0)
-    wastage_matwell = models.DecimalField("matting wastage (%)", max_digits=5, decimal_places=1, default=0)
-    wastage_skirting = models.DecimalField("skirting wastage (%)", max_digits=5, decimal_places=1, default=0)
-    wastage_edge = models.DecimalField("trim wastage (%)", max_digits=5, decimal_places=1, default=0)
+    wastage_sheet = models.DecimalField("sheet wastage (%)", max_digits=5, decimal_places=1, null=True, blank=True,
+                                        help_text="Blank: not set, and the quantities say so.")
+    wastage_tile = models.DecimalField("tile wastage (%)", max_digits=5, decimal_places=1, null=True, blank=True,
+                                        help_text="Blank: not set, and the quantities say so.")
+    wastage_carpet_tile = models.DecimalField("carpet tile wastage (%)", max_digits=5, decimal_places=1, null=True, blank=True,
+                                        help_text="Blank: not set, and the quantities say so.")
+    wastage_matwell = models.DecimalField("matting wastage (%)", max_digits=5, decimal_places=1, null=True, blank=True,
+                                        help_text="Blank: not set, and the quantities say so.")
+    wastage_skirting = models.DecimalField("skirting wastage (%)", max_digits=5, decimal_places=1, null=True, blank=True,
+                                        help_text="Blank: not set, and the quantities say so.")
+    wastage_edge = models.DecimalField("trim wastage (%)", max_digits=5, decimal_places=1, null=True, blank=True,
+                                        help_text="Blank: not set, and the quantities say so.")
+    other_rules = models.TextField(
+        "other rules", blank=True,
+        help_text="Anything else about how Crean measures and prices, for the estimator to read.")
     updated_at = models.DateTimeField(auto_now=True)
 
     # what the software uses today; the rest is recorded and applied as it is built
@@ -448,7 +463,12 @@ class MeasuringRules(models.Model):
         return own or cls.company()
 
     def wastage_for(self, product_type: str):
-        return getattr(self, f"wastage_{product_type}", 0)
+        """The allowance for a product type, or None when Crean has not set one.
+        A tender's own rules fall back to the company's for a type left blank."""
+        pct = getattr(self, f"wastage_{product_type}", None)
+        if pct is None and self.project_id:
+            return getattr(MeasuringRules.company(), f"wastage_{product_type}", None)
+        return pct
 
 
 class RoomCheck(models.Model):

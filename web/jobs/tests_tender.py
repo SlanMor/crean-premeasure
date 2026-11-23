@@ -95,9 +95,31 @@ class WizardTest(TenderBase):
         self.assertFalse(MeasuringRules.objects.filter(project=p).exists())
         p.refresh_from_db()
         self.assertEqual(p.setup_step, "drawings")
-        data["min_opening_m2"] = "0.5"
+        data["min_opening_m2"] = "1.5"
         self.client.post(reverse("wizard", args=[p.pk, "rules"]), data)
-        self.assertEqual(float(MeasuringRules.objects.get(project=p).min_opening_m2), 0.5)
+        self.assertEqual(float(MeasuringRules.objects.get(project=p).min_opening_m2), 1.5)
+
+    def test_company_rules_hold_creans_answers(self):
+        company = MeasuringRules.company()
+        self.assertEqual(float(company.min_opening_m2), 0.5)
+        self.assertEqual((company.furniture, company.stairs, company.lift_floors),
+                         ("kicker_100", "treads_lm", "once"))
+        self.assertEqual(float(company.wastage_for("sheet")), 10)
+        self.assertEqual(float(company.wastage_for("carpet_tile")), 5)
+        self.assertIsNone(company.wastage_for("tile"))  # Crean gave no figure: not set, never 0
+        self.assertIn("One Callidus file per floor plan.", company.other_rules)
+
+    def test_a_tenders_blank_wastage_falls_back_to_the_company(self):
+        p = Project.objects.create(code="W", name="w")
+        own = MeasuringRules.objects.create(project=p, wastage_sheet=12)
+        self.assertEqual(float(own.wastage_for("sheet")), 12)
+        self.assertEqual(float(own.wastage_for("skirting")), 10)
+        self.assertIsNone(own.wastage_for("matwell"))
+        tile = LibraryProduct.objects.create(name="Some tile", type="tile")
+        sheet = LibraryProduct.objects.create(name="Some sheet", type="sheet")
+        from .setup import wastage_for
+        self.assertEqual(wastage_for(p, [tile.name, sheet.name, "Only in Callidus"]),
+                         {tile.name: None, sheet.name: 12.0, "Only in Callidus": None})
 
     def test_products_step_collects_codes_and_remembers_earlier_tenders(self):
         rkd = Company.objects.create(kind="architect", name="RKD")

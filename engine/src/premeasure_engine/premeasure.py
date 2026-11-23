@@ -326,7 +326,7 @@ def write_outputs(
     out_dir: str | Path,
     name: str,
     new_products: list[NewProduct] | None = None,
-    wastage: dict[str, float] | None = None,
+    wastage: dict[str, float | None] | None = None,
 ) -> Outputs:
     """Write the pre-measured job. ``finish_products`` maps a finish code to a
     product name in the starter file, or in ``new_products`` (products added
@@ -385,12 +385,17 @@ def quantities(rooms: list[Room], finish_products: dict[str, str], skirting_prod
     return out
 
 
-def _quantities_csv(rooms, finish_products, skirting_products, wastage: dict[str, float]) -> str:
+def _quantities_csv(rooms, finish_products, skirting_products, wastage: dict[str, float | None]) -> str:
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(["Product", "Unit", "Net quantity", "Wastage %", "Quantity with wastage", "Note"])
     for product, (unit, net) in sorted(quantities(rooms, finish_products, skirting_products).items()):
-        pct = float(wastage.get(product, 0) or 0)
+        pct = wastage.get(product)
+        if pct is None:  # never guess an allowance
+            w.writerow([product, unit, f"{net:.2f}", "not set", "",
+                        "wastage not set for this product or its type: add it in the measuring rules"])
+            continue
+        pct = float(pct)
         w.writerow([product, unit, f"{net:.2f}", f"{pct:g}", f"{net * (1 + pct / 100):.2f}",
                     "net from the drawing; Callidus adds cutting waste when the rooms are laid out"])
     return buf.getvalue()

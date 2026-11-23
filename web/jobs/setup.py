@@ -284,12 +284,14 @@ def new_products_for(chosen: list[str], job: BaseJob):
     return new, problems
 
 
-def wastage_for(project: Project, names: list[str]) -> dict[str, float]:
+def wastage_for(project: Project, names: list[str]) -> dict[str, float | None]:
+    """Wastage % per product: its own, else the rules' for its type. None when
+    neither is set, so the quantities show it as missing rather than as 0%."""
     from .models import MeasuringRules
 
     rules = MeasuringRules.for_project(project)
-    out = {}
+    out: dict[str, float | None] = {n: None for n in names}
     for lib in LibraryProduct.objects.filter(name__in=set(names)):
         pct = lib.wastage_pct if lib.wastage_pct is not None else rules.wastage_for(lib.type)
-        out[lib.name] = float(pct or 0)
+        out[lib.name] = None if pct is None else float(pct)
     return out
