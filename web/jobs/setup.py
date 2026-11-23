@@ -188,6 +188,37 @@ def default_mapping(project: Project, summary: dict) -> tuple[dict, dict]:
     return floors, skirtings
 
 
+def drawing_mapping(pm) -> tuple[dict, dict]:
+    """The products a drawing uses now: the project's products, with what was
+    chosen differently on this drawing on top."""
+    floors, skirtings = default_mapping(pm.project, pm.summary)
+    here = pm.chosen_here or {}
+    if not here and pm.finish_products:
+        # written before choices were kept separately: keep its choices only
+        # where the project's products say nothing
+        here = {"floor": {k: v for k, v in pm.finish_products.items() if k not in floors},
+                "skirting": {k: v for k, v in pm.skirting_products.items() if k not in skirtings}}
+    for kind, mapping in (("floor", floors), ("skirting", skirtings)):
+        for code, name in (here.get(kind) or {}).items():
+            if name:
+                mapping[code] = name
+            else:
+                mapping.pop(code, None)
+    return floors, skirtings
+
+
+def chosen_differently(pm, floors: dict, skirtings: dict) -> dict:
+    """What the estimator chose on a drawing that differs from the project's products."""
+    dfl, dsk = default_mapping(pm.project, pm.summary)
+    out = {"floor": {}, "skirting": {}}
+    for f in pm.summary["finishes"]:
+        kind = f["kind"] if f["kind"] == "floor" else "skirting"
+        chosen, default = (floors, dfl) if kind == "floor" else (skirtings, dsk)
+        if chosen.get(f["code"], "") != default.get(f["code"], ""):
+            out[kind][f["code"]] = chosen.get(f["code"], "")
+    return out
+
+
 def unmapped(summary: dict, floors: dict, skirtings: dict) -> list[dict]:
     """Finishes found on the drawing (with area or length) that have no product."""
     return [

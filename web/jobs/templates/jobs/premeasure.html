@@ -91,6 +91,9 @@
 <div class="card">
   <h2>Products</h2>
   <p class="muted">Each finish on the drawing's legend, with what was found, and its product from the <a href="{% url 'setup' project.pk %}">project's products</a> (matched by finish code). You can change one here for this drawing only. Finishes with no product are left out of Callidus and stay in the review file.</p>
+  {% if out_of_date %}
+  <div class="note"><b>The products have changed since the Callidus files were written.</b> The choices below are the project's products as they are now. Check them, then write again to update the files.</div>
+  {% endif %}
   {% if missing %}
   <div class="note">
     {{ missing|length }} finish code{{ missing|length|pluralize }} on this drawing {{ missing|length|pluralize:"is,are" }} not in the project's products yet: {% for f in missing %}{{ f.code }}{% if not forloop.last %}, {% endif %}{% endfor %}.
