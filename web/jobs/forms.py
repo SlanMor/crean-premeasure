@@ -58,7 +58,7 @@ class ProjectForm(forms.ModelForm):
 
     class Meta:
         model = Project
-        fields = ["code", "name", "site", "due", "notes"]
+        fields = ["code", "name", "site", "due", "notes", "keep_files"]
         widgets = {"notes": forms.Textarea(attrs={"rows": 3}), "due": forms.DateInput(attrs={"type": "date"})}
         labels = {"code": "Project ID", "name": "Project name"}
 
@@ -406,3 +406,12 @@ class CheckedJobsForm(forms.Form):
             if not est.rooms:
                 raise forms.ValidationError(f"{f.name}: no rooms in this Callidus job.")
         return files
+
+
+class SystemSettingsForm(forms.ModelForm):
+    class Meta:
+        from .models import SystemSettings
+
+        model = SystemSettings
+        fields = ["alert_emails", "working_files_days", "replaced_days", "tender_months"]
+        widgets = {"alert_emails": forms.Textarea(attrs={"rows": 3})}

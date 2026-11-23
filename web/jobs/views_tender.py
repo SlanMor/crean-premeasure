@@ -501,3 +501,125 @@ def set_revision(request, pk: int):
         else:
             messages.success(request, "This drawing replaces no other.")
     return redirect("changes" if old and pm.revision_diff else "premeasure", pk=pk)
+
+
+# --- deleting and housekeeping ------------------------------------------------------
+
+
+def _mb(n: int) -> str:
+    return f"{n / 1e6:,.1f} MB" if n < 1e9 else f"{n / 1e9:,.2f} GB"
+
+
+@login_required
+def delete_drawings(request, pk: int):
+    """Delete one or more drawings of a tender, after a confirmation."""
+    from .housekeeping import delete_premeasure, premeasure_bytes
+
+    project = get_object_or_404(Project, pk=pk)
+    ids = [int(x) for x in request.POST.getlist("ids") + request.GET.getlist("ids") if str(x).isdigit()]
+    drawings = list(project.premeasures.filter(pk__in=ids).select_related("drawing"))
+    if not drawings:
+        messages.info(request, "Tick the drawings to delete first.")
+        return redirect("project", pk=pk)
+    if request.method == "POST" and request.POST.get("confirm") == "yes":
+        busy = [d for d in drawings if d.busy]
+        freed = sum(delete_premeasure(d, by=request.user) for d in drawings if not d.busy)
+        n = len(drawings) - len(busy)
+        messages.success(request, f"Deleted {n} drawing{'s' if n != 1 else ''}, {_mb(freed)} freed."
+                         + (f" {len(busy)} still being read or written were left; try again when they finish." if busy else ""))
+        return redirect("project", pk=pk)
+    rows = []
+    for d in drawings:
+        shared = d.drawing.premeasures.exclude(pk__in=ids).exists()
+        try:
+            newer = d.superseded_by
+        except Premeasure.DoesNotExist:
+            newer = None
+        # the PDF is counted once, against the first of the ticked drawings that use it
+        first_user = min(x.pk for x in drawings if x.drawing_id == d.drawing_id)
+        pdf = 0 if shared or first_user != d.pk else _size_of(d.drawing.file)
+        rows.append({"d": d, "bytes": _mb(premeasure_bytes(d) + pdf), "shared": shared,
+                     "newer": newer if newer and newer.pk not in ids else None,
+                     "older": d.supersedes if d.supersedes_id and d.supersedes_id not in ids else None,
+                     "back": d.checked_jobs.filter(current=True).exists()})
+    return render(request, "jobs/delete_drawings.html", {"project": project, "rows": rows, "ids": ids})
+
+
+def _size_of(f) -> int:
+    try:
+        return f.size if f else 0
+    except (FileNotFoundError, OSError, ValueError):
+        return 0
+
+
+@staff_required
+def delete_tender(request, pk: int):
+    """Delete a tender, or only its files. The code must be typed to confirm."""
+    from .housekeeping import delete_project, delete_project_files, project_bytes
+
+    project = get_object_or_404(Project, pk=pk)
+    size = project_bytes(project)
+    if request.method == "POST":
+        if request.POST.get("code", "").strip() != project.code:
+            messages.error(request, "Type the project ID exactly to confirm.")
+        elif request.POST.get("what") == "files":
+            freed = delete_project_files(project, by=request.user)
+            messages.success(request, f"Removed the files of {project.code}, {_mb(freed)} freed. The tender, its "
+                                      "products and its figures are kept.")
+            return redirect("project", pk=pk)
+        elif project.premeasures.filter(status__in=["queued", "reading", "writing"]).exists():
+            messages.error(request, "Some drawings are still being read or written. Try again when they finish.")
+        else:
+            freed = delete_project(project, by=request.user)
+            messages.success(request, f"Deleted {project.code} {project.name}, {_mb(freed)} freed.")
+            return redirect("home")
+    return render(request, "jobs/delete_tender.html", {"project": project, "size": _mb(size),
+                                                       "n": project.premeasures.count()})
+
+
+@staff_required
+def system(request):
+    """Backups, alerts, storage and retention."""
+    from .alerts import recipients
+    from .backup import target
+    from .forms import SystemSettingsForm
+    from .housekeeping import disk, plan_cleanup, project_bytes
+    from .models import Alert, BackupRun, DeletionLog, SystemSettings
+    from .queue import enqueue
+
+    s = SystemSettings.get()
+    form = SystemSettingsForm(request.POST or None, instance=s)
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "backup":
+            enqueue("jobs.backup.run_backup")
+            messages.success(request, "Backup started. It appears below when it finishes.")
+            return redirect("system")
+        if action == "cleanup":
+            enqueue("jobs.housekeeping.cleanup")
+            messages.success(request, "Clean-up started.")
+            return redirect("system")
+        if action == "test_alert":
+            from .alerts import _mail
+
+            ok = _mail("Test alert", "Alerts reach you. Nothing is wrong.")
+            if ok:
+                messages.success(request, f"Test alert sent to {', '.join(recipients())}.")
+            else:
+                messages.error(request, "Could not send: check the email settings in .env and the addresses here.")
+            return redirect("system")
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Saved.")
+            return redirect("system")
+    d = disk()
+    sizes = sorted(((p, project_bytes(p)) for p in Project.objects.all()), key=lambda x: -x[1])[:10]
+    plan = plan_cleanup()
+    t = target()
+    return render(request, "jobs/system.html", {
+        "form": form, "disk": d, "disk_used": _mb(d["used"]), "disk_total": _mb(d["total"]), "media": _mb(d["media"]),
+        "sizes": [(p, _mb(n)) for p, n in sizes if n], "plan": plan, "plan_bytes": _mb(plan.bytes),
+        "target": t.describe() if t else "", "runs": BackupRun.objects.all()[:7],
+        "alerts": Alert.objects.filter(resolved_at=None), "recent_alerts": Alert.objects.exclude(resolved_at=None)[:5],
+        "recipients": recipients(), "deletions": DeletionLog.objects.select_related("by")[:15],
+    })

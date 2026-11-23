@@ -43,4 +43,45 @@ Migrations run when the web container starts. After the update that adds the dra
 
 ## Backups
 
-Hetzner takes daily server backups. A nightly database dump to object storage is still to be added.
+Every night at 2am the scheduler service backs up, off the server, to Hetzner Object Storage (EU):
+
+- **The database**, as a compressed Django dump (it does not depend on the Postgres version). Kept daily for 14 days, then the first of each month for 12 months.
+- **The drawings, Callidus files and outputs**, copied file by file, only new or changed ones each night. Working files the platform can make again are left out. A file deleted on the server is removed from the backup 30 days later, so a mistaken deletion can be recovered for a month.
+
+Hetzner's own daily server snapshots carry on as well.
+
+### Setting it up (once)
+
+1. In the Hetzner Cloud console: Object Storage, Create bucket. Location Falkenstein (fsn1): a different data centre from the server in Helsinki, so one incident cannot take both. Name it, for example `crean-premeasure-backup` (names are unique across Hetzner). Keep it **private**.
+2. Security, S3 credentials, Generate credentials. Copy the access key and secret key (the secret is shown once).
+3. On the server, add to `.env`:
+
+```
+BACKUP_S3_ENDPOINT=https://fsn1.your-objectstorage.com
+BACKUP_S3_REGION=fsn1
+BACKUP_S3_BUCKET=crean-premeasure-backup
+BACKUP_S3_ACCESS_KEY=...
+BACKUP_S3_SECRET_KEY=...
+```
+
+4. `docker compose up -d --build`, then `docker compose exec web python manage.py backup` for a first backup now. Settings, System shows each night's result.
+
+### Restoring (after losing the server)
+
+On a new server, set up as in "First deploy" with the same `.env`, then:
+
+```bash
+docker compose up -d --build
+docker compose exec web python manage.py restore_backup --list      # the dumps kept
+docker compose exec web python manage.py restore_backup             # the latest, and every file
+```
+
+`--dump database/2026-11-23-0200.json.gz` restores an earlier one; `--no-files` only the database. Restore into a fresh database (migrations run when the web container starts; do not create a superuser first).
+
+## Alerts
+
+The scheduler checks every 15 minutes and emails the addresses in Settings, System (or every administrator with an email) when: a drawing fails with a program error, a page fails, drawings have waited over 45 minutes or the worker has stopped, the disk is 85% full, or there has been no backup for 26 hours. Each problem is emailed once, again every 12 hours while it lasts, and once more when it clears. Alerts need the email settings in `.env`. "Send a test alert" in Settings, System checks they arrive.
+
+## Clean-up
+
+At 4am the scheduler removes files by the retention settings in Settings, System: working files after 60 days (made again when needed), and, if set, replaced revisions after a number of days and the files of tenders inactive for a number of months. A tender marked "keep this tender's files" never loses its drawings or Callidus files (only working files). `python manage.py cleanup --dry-run` shows what would go.

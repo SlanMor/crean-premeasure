@@ -25,6 +25,7 @@
     {% with field=form.due %}{% include "jobs/_field.html" %}{% endwith %}
   </div>
   {% with field=form.notes %}{% include "jobs/_field.html" %}{% endwith %}
+  {% if project %}{% with field=form.keep_files %}{% include "jobs/_field.html" %}{% endwith %}{% endif %}
   <button class="btn">{% if project %}Save{% else %}Next: tender questions{% endif %}</button>
 </form>
 <script>

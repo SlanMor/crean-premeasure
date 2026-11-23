@@ -9,6 +9,7 @@ How an estimator turns finishes drawings into pre-measured Callidus jobs, and th
 - **Users.** Add each estimator. "Can change settings" gives access to this area.
 - **Clients and contractors.** Clients, main contractors and architects, with a contact and email. They are picked from a list when a tender is set up, and a new one typed in there is added here. The architect's email fills in the queries email.
 - **Rooms marked wrong.** Every room an estimator said was wrong while checking, with their note: where the reading needs work.
+- **System.** Backups (each night's result, "Back up now"), problems now, who alerts go to (and a test alert), space used by tender, how long files are kept (working files, replaced revisions, inactive tenders), what the next clean-up will remove, and recent deletions. Setting up backups and restoring: `docs/deploy.md`.
 
 ## Products (everyone)
 
@@ -40,6 +41,8 @@ When a product is not already in the Callidus job a file is built on, the platfo
 - **Accuracy on real tenders** (Settings): the same across every tender, split between architects' PDF exports and scans.
 
 **New revisions.** Upload a new revision like any drawing. It is recognised by its file name with the revision left off ("A-110 P2" replaces "A-110 P1"; "Rev C", "_C02" and "(T1)" are read too, but a lone letter such as "part_B" is part of the name). Once read, it is compared with the revision it replaces, room by room, allowing for the plan having moved on the sheet. Rooms that have not changed keep their room checks, and products chosen on the old drawing carry over. Changed and new rooms join "Check rooms". "What changed" shows them on the drawing (added in green, removed in red, changed in orange), the change in area by finish, and a note if the old revision's Callidus job had already come back checked. If a file is named like a revision but most of its rooms differ, it is not linked and the to-do list asks. Any drawing can be linked to the one it replaces, or unlinked, at the bottom of its page. Replaced drawings stay for the record and drop out of the tender's lists and quantities.
+
+**Deleting.** Tick drawings on the tender page and "Delete the ticked drawings", or "Delete this drawing" at the foot of a drawing's page. The confirmation shows the space freed and what else changes: a PDF with other pages still in use stays; the revision a drawing replaced becomes current again; a checked Callidus job stays in the measure spreadsheet. Administrators can also delete a whole tender, or only its files (keeping the tender, its products and its figures), by typing its project ID. Every deletion is listed in Settings, System. Deleted files stay in the backup for 30 days.
 
 **A single drawing** can still be reviewed on its own page: the picture of the rooms found, each legend finish with its product (change one for this drawing only), and the areas with their status. Its "Next" bar says what is left. A product chosen on a drawing for a code the tender has no product for is added to the tender's products. A drawing always follows the tender's products as they are now, except where a different product was chosen on it; if products or room checks change after the files were written, it says to write again.
 

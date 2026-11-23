@@ -1,0 +1,16 @@
+{% extends "jobs/base.html" %}
+{% block title %}Delete · {{ project.code }}{% endblock %}
+{% block content %}
+<p class="muted"><a href="{% url 'project' project.pk %}">{{ project.code }} {{ project.name }}</a></p>
+<h1>Delete {{ project.code }} {{ project.name }}?</h1>
+<p class="sub">{{ n }} drawing{{ n|pluralize }}, {{ size }} of files. This cannot be undone (the nightly backup keeps deleted files for 30 days).</p>
+<form method="post" class="card">{% csrf_token %}
+  <div class="field"><label><input type="radio" name="what" value="files" checked> Remove its files only</label>
+    <div class="help">Drawings, Callidus files and uploads go. The tender, its products, its client and contractor, and the accuracy figures stay.</div></div>
+  <div class="field"><label><input type="radio" name="what" value="all"> Delete the whole tender</label>
+    <div class="help">Everything about it, for good.</div></div>
+  <div class="field" style="max-width:320px"><label for="code">Type the project ID ({{ project.code }}) to confirm</label><input type="text" name="code" id="code" autocomplete="off"></div>
+  <button class="btn bad">Delete</button>
+  <a class="btn secondary" href="{% url 'project' project.pk %}" style="margin-left:8px">Cancel</a>
+</form>
+{% endblock %}

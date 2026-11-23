@@ -69,6 +69,13 @@ def _fail(pm: Premeasure, exc: Exception) -> None:
     pm.status = Premeasure.Status.FAILED
     pm.error = str(exc) if isinstance(exc, plain) else f"{type(exc).__name__}: {exc}"
     pm.save(update_fields=["status", "error", "updated_at"])
+    if not isinstance(exc, plain):  # a program error: tell the administrators
+        try:
+            from .alerts import drawing_failed
+
+            drawing_failed(pm)
+        except Exception:
+            pass
 
 
 def _setup_names(pm: Premeasure) -> list[str]:
@@ -299,6 +306,9 @@ def write_premeasure(pk: int) -> None:
         }
         pm.status, pm.error = Premeasure.Status.DONE, ""
         pm.save()
+        from .alerts import clear_alert
+
+        clear_alert(f"drawing-{pm.pk}")
     except Exception as exc:
         _fail(pm, exc)
     _batch_progress(pm)

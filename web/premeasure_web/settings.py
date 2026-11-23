@@ -96,6 +96,21 @@ EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
 EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "1") == "1"
 DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "Crean pre-measure <noreply@markgaffney.com>")
 SITE_URL = os.environ.get("SITE_URL", "https://crean.markgaffney.com")
+SERVER_EMAIL = DEFAULT_FROM_EMAIL
+
+# a page that fails with a program error alerts the administrators (Settings, System)
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {"class": "logging.StreamHandler"},
+        "alert": {"class": "jobs.error_alerts.ErrorHandler", "level": "ERROR"},
+    },
+    "loggers": {
+        "django": {"handlers": ["console"], "level": "INFO"},
+        "django.request": {"handlers": ["console", "alert"], "level": "ERROR", "propagate": False},
+    },
+}
 
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "home"
