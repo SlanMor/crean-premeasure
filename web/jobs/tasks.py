@@ -86,6 +86,11 @@ def _min_opening(pm: Premeasure) -> float:
     return float(MeasuringRules.for_project(pm.project).min_opening_m2)
 
 
+def _schedule(pm: Premeasure) -> str | None:
+    up = pm.project.finishes_schedule()
+    return up.file.path if up else None
+
+
 def _analysis(pm: Premeasure):
     from premeasure_engine.premeasure import analyse
 
@@ -96,7 +101,7 @@ def _analysis(pm: Premeasure):
         except Exception:
             pass  # stale after an engine update: read the drawing again
     return analyse(pm.drawing.file.path, _setup_names(pm), page=pm.page - 1, min_opening=_min_opening(pm),
-                   scale=pm.scale, sheet=pm.sheet or None)
+                   scale=pm.scale, sheet=pm.sheet or None, schedule=_schedule(pm))
 
 
 def _save_file(pm: Premeasure, field: str, path: Path) -> None:
@@ -115,7 +120,7 @@ def analyse_premeasure(pk: int) -> None:
     pm.save(update_fields=["status", "error", "updated_at"])
     try:
         a = analyse(pm.drawing.file.path, _setup_names(pm), page=pm.page - 1, min_opening=_min_opening(pm),
-                    scale=pm.scale, sheet=pm.sheet or None)
+                    scale=pm.scale, sheet=pm.sheet or None, schedule=_schedule(pm))
         pm.summary = summary(a)
         pm.summary["min_opening_m2"] = _min_opening(pm)
         pm.finish_products, pm.skirting_products = default_mapping(pm.project, pm.summary)

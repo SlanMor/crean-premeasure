@@ -221,6 +221,37 @@ class FlowTest(TestCase):
         job = self.read_job(z, pm)
         self.assertTrue(any(r.material.name == ff7.library.name for r in job.rooms))
 
+    def test_finishes_schedule_settles_shared_colours_and_is_shown(self):
+        sched = CASHEL / "finishes-schedule.pdf"
+        if not (CASHEL / "finishes-P3.pdf").exists() or not sched.exists():
+            self.skipTest("Cashel P3 and its schedule are not in the fixtures")
+        self.add_drawings([self.upload(CASHEL / "finishes-P3.pdf")], revision="P3", auto_write="", notify="")
+        pm = Premeasure.objects.get()
+        self.assertIn("FF7 or FF11", pm.summary["shared_colours"])
+        self.assertContains(self.client.get(reverse("premeasure", args=[pm.pk])), "settles them by room number")
+
+        bad = self.client.post(reverse("project_schedule", args=[self.project.pk]),
+                               {"schedule": SimpleUploadedFile("schedule.xlsx", b"not a pdf"), "reread": "on"})
+        self.assertRedirects(bad, reverse("project", args=[self.project.pk]))
+        self.assertIsNone(self.project.finishes_schedule())
+
+        self.client.post(reverse("project_schedule", args=[self.project.pk]),
+                         {"schedule": self.upload(sched, "Finish schedule.pdf"), "reread": "on"})
+        pm.refresh_from_db()
+        s = pm.summary["schedule"]
+        self.assertEqual(s["rows"], 12)
+        self.assertGreater(s["settled_m2"], 680)
+        self.assertEqual({d["room"] for d in s["differs"]}, {"F16", "G24"})
+        codes = {f["code"] for f in pm.summary["finishes"] if f["rooms"]}
+        self.assertFalse({"FF7 or FF11", "FF8 or FF10"} & codes)
+        page = self.client.get(reverse("premeasure", args=[pm.pk]))
+        self.assertContains(page, "Finishes schedule")
+        self.assertContains(page, "F16, G24")
+        self.assertContains(self.client.get(reverse("project", args=[self.project.pk])), "Finish_schedule.pdf")
+
+        self.client.post(reverse("project_schedule", args=[self.project.pk]), {"action": "remove"})
+        self.assertIsNone(self.project.finishes_schedule())
+
     def test_import_a_callidus_job_then_bulk_upload_runs_to_the_end(self):
         # read one drawing so the import can match legend finishes to Crean's products
         self.add_drawings([self.upload(CASHEL / "finishes-P2.pdf")], auto_write="", notify="")

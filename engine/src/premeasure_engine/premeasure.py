@@ -111,9 +111,12 @@ def analyse(
     min_opening: float | None = None,
     scale: float | None = None,
     sheet: str | None = None,
+    schedule: str | Path | None = None,
 ) -> Analysis:
     """``products``: the product names to suggest from, or a Callidus .est holding them.
     ``min_opening``: openings smaller than this (m2) are measured through.
+    ``schedule``: the finishes schedule (PDF), which settles rooms the legend
+    gives a shared colour and flags rooms where it names another finish.
     ``scale`` (1:N) and ``sheet`` (A0..A4): only needed when the drawing does not
     show them; the sheet size only matters for a picture of a drawing."""
     pdf = Path(pdf)
@@ -130,6 +133,14 @@ def analyse(
         pic = read_picture(pdf, page=page, sheet=sheet, scale=scale, **kwargs)
         legend, rooms, report = pic.legend, pic.rooms, pic.report
         scale, width_m, height_m = pic.scale, pic.width_m, pic.height_m
+    if schedule:
+        from .schedule import apply_schedule, read_schedule
+
+        try:
+            sched = read_schedule(schedule, {c for r in rooms for c in r.codes})
+            report["schedule"] = apply_schedule(rooms, legend, sched)
+        except Exception as exc:  # never fail the drawing over the schedule
+            report["schedule"] = {"source": Path(schedule).name, "error": f"{type(exc).__name__}: {exc}"}
     if isinstance(products, (str, Path)):
         products = [m.name for m in read_est(products).materials]
     materials = [m for m in products if m not in NOT_A_PRODUCT]
@@ -214,6 +225,8 @@ def summary(a: Analysis) -> dict:
             {"colour": list(c), "area_m2": v} for c, v in sorted(rep.get("unknown_fills", {}).items(), key=lambda kv: -kv[1])
         ],
         "tagged_not_in_legend": rep.get("tagged_not_in_legend", {}),
+        "shared_colours": rep.get("shared_colours", {}),
+        "schedule": rep.get("schedule"),
         "picture": _picture_summary(a),
     }
 

@@ -34,6 +34,7 @@ urlpatterns = [
     path("premeasure/<int:pk>/", views.premeasure, name="premeasure"),
     path("premeasure/<int:pk>/write/", views.write, name="write"),
     path("premeasure/<int:pk>/reread/", views.reread, name="reread"),
+    path("project/<int:pk>/schedule/", views.project_schedule, name="project_schedule"),
     path("premeasure/<int:pk>/retry/", views.retry, name="retry"),
     path("premeasure/<int:pk>/scale/", views.set_scale, name="set_scale"),
     path("premeasure/<int:pk>/status/", views.status, name="status"),

@@ -96,3 +96,10 @@ Against Crean's checked Callidus job for Cashel:
 - Settling the shared colours by room number from the schedule gives every room its right product: 684 m2 settled, no product differences left.
 - Most of the 3% is wet rooms (WCs, showers, sluice: 11 to 22% larger than Crean's on 4 to 7 m2 rooms) and some classrooms (5 to 8%). Fitted units are the likely reason: Crean measures 100 mm in from the kick board, a rule not yet applied.
 - Corridors are split differently (Crean splits at the feature colour areas), which the comparison counts as "split or joined", not as an error. Crean adds matwells and stair landings by hand.
+
+## Cashel finishes schedule, 23 November 2026
+
+The main contractor's schedule (5 pages, July 2026) is read as a table: the room number column and the floor finish column are found from the header row, rows are anchored on room numbers the drawing itself has, and each row's finish is matched to the legend by product numbers (standards such as EN 13845 ignored). All 12 rows are read.
+
+- P3: 684 m2 of shared-colour rooms settled. With the products the platform suggests, no room ends up on a different product from Crean's own job. Two corridors are flagged: their row quotes Eternity 3866 and "Neptune 3358" (3358 is Petrol's number), a genuine query.
+- P2: nothing to settle, and 1,157 m2 flagged where the schedule names another finish. That is the gap first seen between P2 and Crean's price.

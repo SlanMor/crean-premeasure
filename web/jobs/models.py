@@ -74,6 +74,10 @@ class Project(models.Model):
         """The tender's drawings, without those replaced by a later revision."""
         return self.premeasures.filter(superseded_by__isnull=True)
 
+    def finishes_schedule(self):
+        """The tender's finishes schedule (the latest uploaded), or None."""
+        return self.uploads.filter(kind="schedule").order_by("-uploaded_at", "-pk").first()
+
     def project_products(self):
         """This project's products: its shortlist and every product given to a finish code."""
         ids = set(self.shortlist.values_list("id", flat=True))
@@ -216,6 +220,7 @@ class Upload(models.Model):
         CALLIDUS_BACKGROUND = "calback", "Callidus .CalBack"
         MEASURE_SHEET = "xlsx", "Measure spreadsheet"
         BOQ = "boq", "BOQ"
+        SCHEDULE = "schedule", "Finishes schedule"
 
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="uploads")
     level = models.ForeignKey(Level, on_delete=models.SET_NULL, null=True, blank=True)
