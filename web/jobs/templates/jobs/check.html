@@ -1,0 +1,49 @@
+{% extends "jobs/base.html" %}
+{% block title %}Check rooms · {{ pm.title }}{% endblock %}
+{% block content %}
+<p class="muted"><a href="{% url 'project' project.pk %}">{{ project.code }} {{ project.name }}</a> / <a href="{% url 'premeasure' pm.pk %}">{{ pm.title }}</a></p>
+<h1>Check rooms</h1>
+{% if room %}
+<p class="sub">{{ left }} of {{ total }} left on this drawing, biggest first. Is the orange outline the floor to price?</p>
+<div class="checkview">
+  <div><img src="{% url 'room_image' pm.pk room.id %}" alt="The room on the drawing"></div>
+  <div>
+    <div class="card">
+      <h2>{{ room.label|default:"(no room tag)" }}</h2>
+      <p><b>{{ room.area_m2|floatformat:"2g" }} m²</b> · {{ room.finish|default:"no finish" }}{% if product %}<br><span class="muted">{{ product }}</span>{% endif %}</p>
+      {% if room.reasons %}<p class="reasons"><b>Why it is marked:</b> {{ room.reasons|join:"; " }}</p>{% endif %}
+      {% if check %}<p><span class="pill {% if check.decision == 'ok' %}ok{% else %}bad{% endif %}">{{ check.get_decision_display }}</span>{% if check.note %} <span class="muted">{{ check.note }}</span>{% endif %}</p>{% endif %}
+      <form method="post" id="ok">{% csrf_token %}<input type="hidden" name="room" value="{{ room.id }}"><input type="hidden" name="decision" value="ok">
+        <button class="btn ok bigbtn"><span class="kbd">1</span> Right: price it as it is</button></form>
+      <form method="post" id="wrong">{% csrf_token %}<input type="hidden" name="room" value="{{ room.id }}"><input type="hidden" name="decision" value="by_hand">
+        <input type="text" name="note" id="note" placeholder="What is wrong? (optional, helps the software learn)" style="margin-bottom:8px">
+        <button class="btn bad bigbtn"><span class="kbd">2</span> Wrong: leave it out, measure by hand</button></form>
+      {% if skip %}<a class="btn secondary bigbtn" id="skip" href="?room={{ skip }}"><span class="kbd">S</span> Skip for now</a>{% endif %}
+    </div>
+    <details class="card"><summary><b>What the reasons mean</b></summary>
+      {% for key, text in explain %}<p class="reasons"><b>{{ key|capfirst }}:</b> {{ text }}</p>{% endfor %}
+    </details>
+  </div>
+</div>
+<script>
+document.addEventListener("keydown", function (e) {
+  if (e.target.tagName === "INPUT") { if (e.key === "Enter") { e.preventDefault(); document.getElementById("wrong").submit(); } return; }
+  if (e.key === "1") document.getElementById("ok").submit();
+  if (e.key === "2") document.getElementById("note").focus();
+  if (e.key.toLowerCase() === "s" && document.getElementById("skip")) location = document.getElementById("skip").href;
+});
+</script>
+{% else %}
+<div class="alldone">Every room on this drawing is checked.</div>
+<p style="margin-top:16px">
+  {% if next_drawing %}<a class="btn" href="{% url 'check' next_drawing.pk %}">Next drawing: {{ next_drawing.title }}</a>{% endif %}
+  <a class="btn {% if next_drawing %}secondary{% endif %}" href="{% url 'premeasure' pm.pk %}">Back to the drawing</a>
+  <a class="btn secondary" href="{% url 'project' project.pk %}">Tender to-do list</a></p>
+{% endif %}
+{% if recent %}
+<div class="card" style="margin-top:20px"><h2>Checked on this drawing</h2>
+<table>{% for c, r in recent %}<tr><td>{{ r.label|default:"(no room tag)" }} <span class="muted">{{ r.area_m2|floatformat:"2g" }} m²</span></td><td><span class="pill {% if c.decision == 'ok' %}ok{% else %}bad{% endif %}">{{ c.get_decision_display }}</span> <span class="muted">{{ c.note }}</span></td>
+  <td class="num"><a href="?room={{ c.room_id }}">look again</a>
+  <form method="post" style="display:inline;margin-left:10px">{% csrf_token %}<input type="hidden" name="room" value="{{ c.room_id }}"><button class="linklike" name="decision" value="undo">undo</button></form></td></tr>{% endfor %}</table></div>
+{% endif %}
+{% endblock %}

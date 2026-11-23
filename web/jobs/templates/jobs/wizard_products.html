@@ -1,0 +1,54 @@
+{% extends "jobs/base.html" %}
+{% block title %}{{ project.code }} products · Crean pre-measure{% endblock %}
+{% block content %}
+<p class="muted"><a href="{% url 'project' project.pk %}">{{ project.code }} {{ project.name }}</a></p>
+<h1>Products</h1>
+<p class="sub">Every finish code on the tender's drawings, once. Choose a product for each; every drawing follows it. Products are suggested where one clearly matches, from the list or from earlier tenders with the same architect: check them.</p>
+{% include "jobs/_wizard_steps.html" %}
+{% if busy %}
+<div class="nextbar"><div class="text"><b>Reading drawings: {{ n_read }} of {{ n_drawings }} done.</b> Codes appear here as each one finishes. You can choose products now and save; new codes are added when you come back.</div>
+<a class="btn small secondary" href="{% url 'wizard' project.pk 'products' %}">Refresh</a></div>
+<script>setInterval(function () { fetch("{% url 'todo_status' project.pk %}").then(r => r.json()).then(d => { if (!d.busy) location.reload(); }); }, 6000);</script>
+{% endif %}
+{% if conflicts %}<div class="note"><b>The same code means different things on different drawings:</b> {% for u in conflicts %}{{ u.code }}{% if not forloop.last %}, {% endif %}{% endfor %}. Check which applies; they are on the list of queries for the architect.</div>{% endif %}
+<form method="post">{% csrf_token %}
+  {{ formset.management_form }}
+  <button style="position:absolute;left:-9999px" tabindex="-1" aria-hidden="true">Save</button>
+  {% if formset.non_form_errors %}<div class="msg error">{{ formset.non_form_errors|join:" " }}</div>{% endif %}
+  <div class="card">
+  <table>
+    <tr><th></th><th style="width:110px">Code</th><th>What the drawings say</th><th class="num">Found</th><th style="width:36%">Product</th><th class="num">Remove</th></tr>
+    {% for f, use in rows %}
+    <tr>
+      <td>{% if use.fill %}<span class="swatch" style="background:rgb({{ use.fill.0 }},{{ use.fill.1 }},{{ use.fill.2 }})"></span>{% endif %}</td>
+      <td>{{ f.id }}{{ f.finish_code }}{{ f.finish_code.errors }}{% if use.conflict %}<span class="pill warn">differs</span>{% endif %}</td>
+      <td class="reasons">{% if use %}{% for text, ds in use.descriptions.items %}<div>{{ text|truncatechars:140 }}{% if use.descriptions|length > 1 %} <i>({{ ds|join:", " }})</i>{% endif %}</div>{% empty %}{{ f.instance.description|truncatechars:140 }}{% endfor %}
+        <div class="tag">{{ use.drawings|length }} drawing{{ use.drawings|length|pluralize }}</div>{% else %}{{ f.instance.description|default:""|truncatechars:140 }}{% endif %}</td>
+      <td class="num">{% if use %}{% if use.kind == "floor" %}{{ use.amount|floatformat:"0g" }} m²{% else %}{{ use.amount|floatformat:"0g" }} m{% endif %}{% endif %}</td>
+      <td>{{ f.library }}{{ f.library.errors }}
+        {% if f.instance.spec_source|slice:":5" == "As on" %}<div class="help">{{ f.instance.spec_source }}</div>{% endif %}
+        {% if f.instance.pk and not f.instance.library_id %}<div class="help">Not in the list? <button class="linklike" name="new_for" value="{{ f.instance.pk }}">Add a new product</button></div>{% endif %}</td>
+      <td class="num">{% if f.instance.pk %}{{ f.DELETE }}{% endif %}</td>
+    </tr>
+    {% empty %}<tr><td colspan="6" class="muted">No codes yet. They appear as the drawings are read, or add them by hand in the empty rows.</td></tr>
+    {% endfor %}
+  </table>
+  </div>
+  <div class="card">
+    <h2>This tender's products</h2>
+    <p class="muted">Products from the list this tender uses. They are shown first wherever a product is chosen.</p>
+    {% if shortlist %}<p>{% for p in shortlist %}<span class="pill off" style="margin:0 6px 6px 0">{{ p.name }}</span>{% endfor %}</p>{% endif %}
+    <input type="search" placeholder="Type to filter" oninput="filterList(this, 'id_s-add')" style="margin-bottom:6px;width:100%">
+    {{ shortlist_form.add }}
+    <div class="help">Hold Ctrl (Cmd on a Mac) to pick several.</div>
+  </div>
+  <button class="btn">Save, next: run</button>
+  <button class="btn secondary" name="stay" value="1" style="margin-left:8px">Save</button>
+</form>
+<script>
+function filterList(input, id) {
+  const q = input.value.toLowerCase();
+  for (const o of document.getElementById(id).options) o.hidden = q && !o.text.toLowerCase().includes(q);
+}
+</script>
+{% endblock %}

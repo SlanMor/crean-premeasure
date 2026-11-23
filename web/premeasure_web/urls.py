@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.urls import path
 
-from jobs import views
+from jobs import views, views_tender as tender
 
 urlpatterns = [
     path("health/", views.health, name="health"),
@@ -10,7 +10,15 @@ urlpatterns = [
     path("login/", auth_views.LoginView.as_view(), name="login"),
     path("logout/", auth_views.LogoutView.as_view(), name="logout"),
     path("", views.home, name="home"),
+    path("tenders/new/", tender.new_tender, name="new_tender"),
     path("projects/<int:pk>/", views.project, name="project"),
+    path("projects/<int:pk>/details/", tender.project_edit, name="project_edit"),
+    path("projects/<int:pk>/set-up/<str:step>/", tender.wizard, name="wizard"),
+    path("projects/<int:pk>/write-ready/", tender.write_ready_view, name="write_ready"),
+    path("projects/<int:pk>/queries/", tender.queries_view, name="queries"),
+    path("projects/<int:pk>/quantities.xlsx", tender.tender_quantities, name="tender_quantities"),
+    path("projects/<int:pk>/check/", tender.check_tender, name="check_tender"),
+    path("projects/<int:pk>/status/", tender.todo_status, name="todo_status"),
     path("projects/<int:pk>/setup/", views.setup, name="setup"),
     path("projects/<int:pk>/setup/from/<int:pm>/", views.fill_setup, name="fill_setup"),
     path("projects/<int:pk>/callidus/", views.add_starter, name="add_starter"),
@@ -27,6 +35,8 @@ urlpatterns = [
     path("premeasure/<int:pk>/preview.png", views.preview, name="preview"),
     path("premeasure/<int:pk>/drawing.pdf", views.drawing, name="drawing"),
     path("premeasure/<int:pk>/download/", views.download, name="download"),
+    path("premeasure/<int:pk>/check/", tender.check, name="check"),
+    path("premeasure/<int:pk>/room/<int:room>.png", tender.room_image, name="room_image"),
     path("products/", views.products, name="products"),
     path("products/new/", views.product_edit, name="product_new"),
     path("products/<int:pk>/", views.product_edit, name="product_edit"),
@@ -35,6 +45,10 @@ urlpatterns = [
     path("settings/template/", views.settings_template, name="settings_template"),
     path("settings/users/", views.settings_users, name="settings_users"),
     path("settings/users/<int:pk>/", views.settings_user, name="settings_user"),
+    path("settings/companies/", tender.companies, name="companies"),
+    path("settings/companies/new/", tender.company_edit, name="company_new"),
+    path("settings/companies/<int:pk>/", tender.company_edit, name="company_edit"),
+    path("settings/feedback/", tender.feedback, name="feedback"),
 ]
 
 admin.site.site_header = "Crean pre-measure (technical admin)"

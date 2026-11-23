@@ -1,0 +1,47 @@
+{% extends "jobs/base.html" %}
+{% block title %}Queries · {{ project.code }}{% endblock %}
+{% block content %}
+<p class="muted"><a href="{% url 'project' project.pk %}">{{ project.code }} {{ project.name }}</a></p>
+<h1>Queries for the architect</h1>
+<p class="sub">What the drawings leave open, gathered from every drawing. Untick any you do not want to send; the email below follows.</p>
+{% if items %}
+<div class="card">
+  <table id="items">{% for q in items %}
+    <tr><td style="width:30px"><input type="checkbox" checked data-drawing="{{ q.drawing }}" data-text="{{ q.text }}"></td>
+      <td style="width:28%"><b>{{ q.drawing }}</b></td><td>{{ q.text }}</td></tr>{% endfor %}</table>
+</div>
+<div class="card">
+  <h2>Email</h2>
+  <div class="field"><label>To</label><input type="text" id="to" value="{{ to }}" placeholder="{% if project.architect %}{{ project.architect }}'s email{% else %}The architect's email{% endif %}"></div>
+  <div class="field"><label>Subject</label><input type="text" id="subject" value="{{ subject }}"></div>
+  <div class="field"><label>Message</label><textarea id="body" rows="16">{{ body }}</textarea></div>
+  <a class="btn" id="send" href="#">Open in my email</a>
+  <button class="btn secondary" type="button" id="copy" style="margin-left:8px">Copy the message</button>
+  {% if project.architect and not to %}<p class="help">Add the architect's email in <a href="{% url 'company_edit' project.architect.pk %}">Settings, clients and contractors</a> to fill this in next time.</p>{% endif %}
+</div>
+<script>
+function compose() {
+  const lines = document.getElementById("body").value.split("\n");
+  const keepHead = lines.slice(0, lines.findIndex(l => /^\S/.test(l) && /:$/.test(l)) + 2);
+  const groups = {};
+  document.querySelectorAll("#items input:checked").forEach(function (b) {
+    (groups[b.dataset.drawing] = groups[b.dataset.drawing] || []).push(b.dataset.text);
+  });
+  let out = keepHead.join("\n") + "\n", n = 1;
+  for (const [d, texts] of Object.entries(groups)) { out += d + "\n"; texts.forEach(t => { out += (n++) + ". " + t + "\n"; }); out += "\n"; }
+  document.getElementById("body").value = out + "Thanks,\n";
+}
+document.querySelectorAll("#items input").forEach(b => b.addEventListener("change", compose));
+document.getElementById("send").addEventListener("click", function (e) {
+  e.preventDefault();
+  location = "mailto:" + encodeURIComponent(document.getElementById("to").value) + "?subject=" +
+    encodeURIComponent(document.getElementById("subject").value) + "&body=" + encodeURIComponent(document.getElementById("body").value);
+});
+document.getElementById("copy").addEventListener("click", function () {
+  navigator.clipboard.writeText(document.getElementById("body").value); this.textContent = "Copied";
+});
+</script>
+{% else %}
+<div class="alldone">No queries: the drawings read cleanly.</div>
+{% endif %}
+{% endblock %}

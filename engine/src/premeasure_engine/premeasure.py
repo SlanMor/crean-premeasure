@@ -178,7 +178,7 @@ def analyse(
 def summary(a: Analysis) -> dict:
     """Everything the review screen shows, as plain JSON."""
     rooms = []
-    for i, r in enumerate(sorted(a.rooms, key=_room_order)):
+    for i, r in enumerate(rooms_in_order(a)):
         p = r.geom.representative_point()
         rooms.append(
             {
@@ -190,6 +190,7 @@ def summary(a: Analysis) -> dict:
                 "status": r.status,
                 "reasons": r.reasons,
                 "at": [round(p.x, 2), round(p.y, 2)],
+                "bounds": [round(v, 2) for v in r.geom.bounds],
             }
         )
     rep = a.report
@@ -232,6 +233,75 @@ def _picture_summary(a: Analysis) -> dict | None:
 
 def _room_order(r: Room):
     return (r.label == "", r.label, -r.area)
+
+
+def rooms_in_order(a: Analysis) -> list[Room]:
+    """The rooms in the order the summary numbers them (its "id")."""
+    return sorted(a.rooms, key=_room_order)
+
+
+def apply_checks(a: Analysis, decisions: dict[int, str]) -> tuple[Analysis, list[Room]]:
+    """The estimator's room checks, by summary id: "ok" (the outline is right,
+    so the room is no longer marked to check) or "by_hand" (the outline is
+    wrong or the room is measured by hand, so it is left out of Callidus).
+    Returns a copy of the analysis and the rooms left out."""
+    import copy
+
+    out, by_hand = [], []
+    for i, r in enumerate(rooms_in_order(a)):
+        d = decisions.get(i)
+        if d == "by_hand":
+            by_hand.append(r)
+            continue
+        if d == "ok" and r.status != "Verified":
+            r = copy.copy(r)
+            r.status = "Verified"
+            r.reasons = [f"checked by the estimator ({'; '.join(r.reasons)})"] if r.reasons else []
+        out.append(r)
+    b = copy.copy(a)
+    b.rooms = out
+    return b, by_hand
+
+
+def render_room(a: Analysis, room_id: int, out_png: str | Path, page=None, dpi: int = 100,
+                margin_m: float = 3.0) -> Path:
+    """A close-up of one room: the drawing around it with its outline drawn
+    heavily and the other rooms faintly. ``page`` is the page already rendered
+    at ``dpi`` (grey), to save rendering it for every room."""
+    from PIL import Image, ImageDraw
+
+    room = rooms_in_order(a)[room_id]
+    img = page if page is not None else _page_image(a, dpi)
+    img = img.convert("RGB")
+    k = img.width / a.width_m
+    x0, y0, x1, y1 = room.geom.bounds
+    span = max(x1 - x0, y1 - y0)
+    m = max(margin_m, span * 0.25)
+    # sheet y is negative down the page from the top: pixel y = height + y * k
+    left, right = max(0, int((x0 - m) * k)), min(img.width, int((x1 + m) * k))
+    top, bottom = max(0, int(img.height + (y0 - m) * k)), min(img.height, int(img.height + (y1 + m) * k))
+    if top > bottom:
+        top, bottom = bottom, top
+    crop = img.crop((left, top, right, bottom))
+    over = Image.new("RGBA", crop.size, (0, 0, 0, 0))
+    d = ImageDraw.Draw(over)
+
+    def pts(poly):
+        return [(x * k - left, img.height + y * k - top) for x, y in poly.exterior.coords]
+
+    for other in a.rooms:
+        if other is room or not other.geom.intersects(room.geom.buffer(m)):
+            continue
+        for poly in [other.geom] if other.geom.geom_type == "Polygon" else list(other.geom.geoms):
+            d.polygon(pts(poly), outline=(120, 120, 120, 160), width=1)
+    for poly in [room.geom] if room.geom.geom_type == "Polygon" else list(room.geom.geoms):
+        d.polygon(pts(poly), fill=(230, 140, 0, 60), outline=(200, 90, 0, 255), width=3)
+        for hole in poly.interiors:
+            d.line([(x * k - left, img.height + y * k - top) for x, y in hole.coords], fill=(200, 90, 0, 255), width=2)
+    crop = Image.alpha_composite(crop.convert("RGBA"), over).convert("RGB")
+    out_png = Path(out_png)
+    crop.save(out_png, optimize=True)
+    return out_png
 
 
 @dataclass

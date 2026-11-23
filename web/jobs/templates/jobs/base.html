@@ -62,6 +62,32 @@
   .tag { font-size:12px; color:var(--muted); }
   .linklike { background:none; border:0; padding:0; color:var(--accent); text-decoration:underline; cursor:pointer; font:inherit; }
   select[multiple] { min-height:180px; }
+  input[type=date], input[type=email] { width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:6px; font:inherit; background:#fff; }
+  .wizard { display:flex; gap:6px; margin:4px 0 20px; flex-wrap:wrap; }
+  .wizard > a, .wizard > span { flex:1; min-width:120px; padding:8px 12px; border-radius:6px; background:#fff; border:1px solid var(--line);
+         color:var(--muted); text-decoration:none; font-size:14px; }
+  .wizard .n { display:inline-block; width:22px; height:22px; border-radius:50%; background:var(--bg); text-align:center;
+         line-height:22px; font-size:12px; font-weight:700; margin-right:6px; }
+  .wizard .done { color:var(--ink); } .wizard .done .n { background:var(--okbg); color:var(--ok); }
+  .wizard .current { border-color:var(--accent); color:var(--accent); font-weight:600; }
+  .wizard .current .n { background:var(--accent); color:#fff; }
+  .todo { list-style:none; margin:0; padding:0; }
+  .todo li { display:flex; align-items:center; gap:14px; padding:12px 0; border-bottom:1px solid var(--line); }
+  .todo li:last-child { border-bottom:0; }
+  .todo .dot { width:10px; height:10px; border-radius:50%; background:var(--warn); flex:none; }
+  .todo .wait .dot { background:var(--muted); } .todo .info .dot { background:var(--accent); }
+  .todo .text { flex:1; } .todo form { margin:0; }
+  .alldone { background:var(--okbg); color:var(--ok); border-radius:6px; padding:12px 14px; font-weight:600; }
+  .nextbar { display:flex; align-items:center; gap:14px; background:#fff; border:1px solid var(--accent); border-left-width:5px;
+         border-radius:8px; padding:12px 16px; margin-bottom:20px; } .nextbar .text { flex:1; } .nextbar form { margin:0; }
+  .newco { margin-top:6px; }
+  .checkview { display:grid; grid-template-columns:minmax(0,3fr) minmax(260px,1fr); gap:20px; }
+  .checkview img { width:100%; border:1px solid var(--line); border-radius:6px; background:#fff; }
+  .bigbtn { display:block; width:100%; margin-bottom:8px; text-align:left; padding:12px 14px; }
+  .kbd { display:inline-block; border:1px solid var(--line); border-bottom-width:2px; border-radius:4px; padding:0 6px;
+         font-size:12px; background:#fff; color:var(--ink); margin-right:6px; }
+  .btn.ok { background:var(--ok); } .btn.bad { background:var(--bad); }
+  @media (max-width: 800px) { .checkview { grid-template-columns:1fr; } }
 </style>
 </head>
 <body>
@@ -69,10 +95,11 @@
   <a class="brand" href="{% url 'home' %}">Crean pre-measure</a>
   {% if user.is_authenticated %}
   <nav class="nav">
-    <a href="{% url 'home' %}">Projects</a>
+    <a href="{% url 'home' %}">Tenders</a>
     <a href="{% url 'products' %}">Products</a>
     {% if user.is_staff %}<a href="{% url 'settings' %}">Settings</a>{% endif %}
   </nav>
+  <a class="btn small" style="background:#fff;color:var(--accent)" href="{% url 'new_tender' %}">New tender</a>
   <div class="right">
     <span>{{ user.get_full_name|default:user.username }}</span>
     <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button>Sign out</button></form>

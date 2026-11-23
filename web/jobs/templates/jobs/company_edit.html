@@ -1,0 +1,19 @@
+{% extends "jobs/base.html" %}
+{% block title %}{% if co %}{{ co.name }}{% else %}Add{% endif %} · Crean pre-measure{% endblock %}
+{% block content %}
+<p class="muted"><a href="{% url 'companies' %}">Clients, contractors and architects</a></p>
+<h1>{% if co %}{{ co.name }}{% else %}Add a client, contractor or architect{% endif %}</h1>
+<form method="post" class="card">{% csrf_token %}
+  <div class="form-grid">
+    {% with field=form.kind %}{% include "jobs/_field.html" %}{% endwith %}
+    {% with field=form.name %}{% include "jobs/_field.html" %}{% endwith %}
+    {% with field=form.contact_name %}{% include "jobs/_field.html" %}{% endwith %}
+    {% with field=form.email %}{% include "jobs/_field.html" %}{% endwith %}
+    {% with field=form.phone %}{% include "jobs/_field.html" %}{% endwith %}
+  </div>
+  {% with field=form.notes %}{% include "jobs/_field.html" %}{% endwith %}
+  {% with field=form.active %}{% include "jobs/_field.html" %}{% endwith %}
+  <p class="help">Untick to hide it from the lists without losing the tenders that use it.</p>
+  <button class="btn">Save</button>
+</form>
+{% endblock %}

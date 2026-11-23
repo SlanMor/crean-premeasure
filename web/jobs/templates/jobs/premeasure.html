@@ -9,10 +9,23 @@
   · {% include "jobs/_status.html" %}
 </p>
 
+{% if form %}
+<div class="nextbar"><div class="text">
+  {% if unmapped %}<b>Next: choose products</b> for {{ unmapped|length }} finish{{ unmapped|length|pluralize:"es" }} with none, below.
+  {% elif to_check %}<b>Next: check {{ to_check }} room{{ to_check|pluralize }}</b>, one at a time, biggest first.
+  {% elif pm.status == "review" %}<b>Next: write the Callidus files.</b> Every finish has a product.
+  {% elif out_of_date %}<b>Next: write again.</b> Products or room checks have changed since the files were written.
+  {% else %}<b>This drawing is done.</b> Download the files, or go back to the tender's to-do list.{% endif %}</div>
+  {% if unmapped %}<a class="btn" href="#products">Choose products</a>
+  {% elif to_check %}<a class="btn" href="{% url 'check' pm.pk %}">Check rooms</a>
+  {% elif not unmapped and pm.status == "done" and not out_of_date %}<a class="btn" href="{% url 'download' pm.pk %}">Download</a>{% endif %}
+  <a class="btn secondary" href="{% url 'project' project.pk %}">Tender to-do list</a>
+</div>
+{% endif %}
 {% if pm.summary and not pm.busy %}
 <form method="post" action="{% url 'reread' pm.pk %}" style="margin:-8px 0 16px">{% csrf_token %}
   <button class="btn small secondary">Read the drawing again</button>
-  <span class="muted" style="margin-left:8px">For example after changing the measuring rules.{% if pm.summary.min_opening_m2 %} Read with openings under {{ pm.summary.min_opening_m2 }} m² measured through.{% endif %}</span>
+  <span class="muted" style="margin-left:8px">For example after changing the measuring rules (room checks are cleared).{% if pm.summary.min_opening_m2 %} Read with openings under {{ pm.summary.min_opening_m2 }} m² measured through.{% endif %}</span>
 </form>
 {% endif %}
 {% if pm.busy %}
@@ -55,7 +68,8 @@
   <h2>Callidus files ready</h2>
   <p>{{ pm.written.rooms }} rooms, {{ pm.written.area_m2|floatformat:"2g" }} m², written with the products below, built on {{ pm.written.built_on }}.
   {% if pm.written.new_products %}Added to Callidus: {{ pm.written.new_products|join:", " }}.{% endif %}
-  {% if pm.written.left_out_rooms %}{{ pm.written.left_out_rooms }} areas ({{ pm.written.left_out_m2|floatformat:"2g" }} m²) have no product and are only in the review file.{% endif %}</p>
+  {% if pm.written.left_out_rooms %}{{ pm.written.left_out_rooms }} areas ({{ pm.written.left_out_m2|floatformat:"2g" }} m²) have no product and are only in the review file.{% endif %}
+  {% if pm.written.by_hand_rooms %}{{ pm.written.by_hand_rooms }} area{{ pm.written.by_hand_rooms|pluralize }} ({{ pm.written.by_hand_m2|floatformat:"2g" }} m²) marked to measure by hand {{ pm.written.by_hand_rooms|pluralize:"is,are" }} left out.{% endif %}</p>
   <p><a class="btn" href="{% url 'download' pm.pk %}">Download Callidus files (.zip)</a></p>
   <p class="muted">The zip holds the Callidus job, its background, a review file and a quantities file with wastage. Unzip to a local folder (not the Z: drive) before opening in Callidus. Rooms named "CHECK - " need a look; the reasons are in the review file. Change a product below and write again at any time.</p>
 </div>
@@ -88,7 +102,7 @@
   {% if pm.preview %}<a href="{% url 'preview' pm.pk %}" target="_blank"><img src="{% url 'preview' pm.pk %}?v={{ pm.updated_at|date:'U' }}" alt="Rooms found on the drawing"></a>{% endif %}
 </div>
 
-<div class="card">
+<div class="card" id="products">
   <h2>Products</h2>
   <p class="muted">Each finish on the drawing's legend, with what was found, and its product from the <a href="{% url 'setup' project.pk %}">project's products</a> (matched by finish code). You can change one here for this drawing only. Finishes with no product are left out of Callidus and stay in the review file.</p>
   {% if out_of_date %}
@@ -118,7 +132,7 @@
 </div>
 
 <div class="card">
-  <h2>Areas found</h2>
+  <div class="head"><h2>Areas found</h2>{% if to_check %}<div class="actions"><a class="btn small" href="{% url 'check' pm.pk %}">Check {{ to_check }} room{{ to_check|pluralize }}</a></div>{% endif %}</div>
   <table>
     <tr><th>Room</th><th>Finish</th><th class="num">Area m²</th><th>Skirting</th><th>Status</th></tr>
     {% for r in rooms %}
@@ -127,7 +141,7 @@
       <td>{{ r.finish|default:"-" }}{% if r.product %}<div class="reasons">{{ r.product|truncatechars:60 }}</div>{% endif %}</td>
       <td class="num">{{ r.area_m2|floatformat:"2g" }}</td>
       <td class="reasons">{{ r.skirting }}</td>
-      <td>{% if not r.written %}<span class="pill off">No product</span>{% elif r.status == "Verified" %}<span class="pill ok">Verified</span>{% else %}<span class="pill warn">Check</span>{% endif %}
+      <td>{% if r.check == "by_hand" %}<span class="pill bad">Measure by hand</span>{% elif not r.written %}<span class="pill off">No product</span>{% elif r.check == "ok" %}<span class="pill ok">Checked</span>{% elif r.status == "Verified" %}<span class="pill ok">Verified</span>{% else %}<a class="pill warn" href="{% url 'check' pm.pk %}?room={{ r.id }}">Check</a>{% endif %}
         {% if r.reasons %}<div class="reasons">{{ r.reasons|join:"; " }}</div>{% endif %}</td>
     </tr>
     {% endfor %}

@@ -14,7 +14,6 @@ from django.views.decorators.http import require_POST
 from .forms import (
     LibraryProductForm,
     ProductsForm,
-    ProjectForm,
     RulesForm,
     ScaleForm,
     SetupFormSet,
@@ -62,30 +61,33 @@ def _back(request, nxt: str | None, default: str):
 
 @login_required
 def home(request):
-    projects = Project.objects.annotate(n_drawings=Count("premeasures"))
-    form = ProjectForm(request.POST or None)
-    if request.method == "POST" and form.is_valid():
-        project = form.save()
-        return redirect("setup", pk=project.pk)
+    projects = Project.objects.select_related("client", "main_contractor").annotate(n_drawings=Count("premeasures"))
     recent = Premeasure.objects.select_related("project").all()[:10]
-    return render(request, "jobs/home.html", {"projects": projects, "form": form, "recent": recent})
+    return render(request, "jobs/home.html", {"projects": projects, "recent": recent})
 
 
 @login_required
 def project(request, pk: int):
-    project = get_object_or_404(Project, pk=pk)
+    from .tender import rooms_to_check, tender_todo
+
+    project = get_object_or_404(Project.objects.select_related("client", "main_contractor", "architect"), pk=pk)
     rows = list(project.products.select_related("library"))
+    drawings = list(project.premeasures.prefetch_related("checks"))
+    todo = tender_todo(project, request.user)
     return render(
         request,
         "jobs/project.html",
         {
             "project": project,
             "form": UploadDrawingsForm(),
-            "premeasures": project.premeasures.all(),
+            "premeasures": [(d, len(rooms_to_check(d)) if d.summary and not d.busy else 0) for d in drawings],
             "rows": rows,
             "n_chosen": sum(1 for r in rows if r.library_id),
             "job": base_job(project),
             "own_rules": MeasuringRules.objects.filter(project=project).exists(),
+            "todo": [t for t in todo if t.level != "info"],
+            "more": [t for t in todo if t.level == "info"],
+            "busy": any(d.busy for d in drawings),
         },
     )
 
@@ -257,36 +259,45 @@ def new_premeasure(request, pk: int):
         return redirect("project", pk=pk)
     form = UploadDrawingsForm(request.POST or None, request.FILES or None)
     if request.method == "POST" and form.is_valid():
-        d = form.cleaned_data
-        multi = [f for f in d["drawings"] if form.pages[f.name] > 1]
-        batch = Batch.objects.create(project=project, created_by=request.user, auto_write=d["auto_write"],
-                                     notify=d["notify"], files_pending=len(multi))
-        # create every single-page drawing before any work starts, so the batch is never
-        # seen as finished while some of it is still to come
-        single, todo = None, []
-        for f in d["drawings"]:
-            upload = Upload.objects.create(
-                project=project, kind=Upload.Kind.DRAWING, file=f,
-                drawing_number=Path(f.name).stem[:100], revision=d["revision"],
-            )
-            if f in multi:
-                todo.append(("jobs.tasks.split_pdf", upload.pk, batch.pk, d["level"], d.get("scale"), d.get("sheet") or ""))
-                continue
-            level = d["level"] if len(d["drawings"]) == 1 else ""
-            title = " ".join(x for x in (project.code, level or Path(f.name).stem[:40]) if x)
-            pm = Premeasure.objects.create(
-                project=project, level=d["level"], title=safe_name(title), drawing=upload, page=1,
-                starter=job.upload, created_by=request.user, batch=batch, status=Premeasure.Status.QUEUED,
-                scale=d.get("scale"), sheet=d.get("sheet") or "",
-            )
-            single = pm if len(d["drawings"]) == 1 else None
-            todo.append(("jobs.tasks.analyse_premeasure", pm.pk))
-        for task in todo:
-            enqueue(*task)
+        batch, single = start_drawings(project, form, request.user)
         if single is not None:
             return redirect("premeasure", pk=single.pk)
         return redirect("batch", pk=batch.pk)
     return render(request, "jobs/new_premeasure.html", {"project": project, "form": form})
+
+
+def start_drawings(project: Project, form: UploadDrawingsForm, user, auto_write: bool | None = None):
+    """Create the drawings for an upload and queue their reading. Returns the
+    batch, and the drawing when only one single-page PDF was given."""
+    job = base_job(project)
+    d = form.cleaned_data
+    multi = [f for f in d["drawings"] if form.pages[f.name] > 1]
+    batch = Batch.objects.create(project=project, created_by=user,
+                                 auto_write=d["auto_write"] if auto_write is None else auto_write,
+                                 notify=d["notify"], files_pending=len(multi))
+    # create every single-page drawing before any work starts, so the batch is never
+    # seen as finished while some of it is still to come
+    single, todo = None, []
+    for f in d["drawings"]:
+        upload = Upload.objects.create(
+            project=project, kind=Upload.Kind.DRAWING, file=f,
+            drawing_number=Path(f.name).stem[:100], revision=d["revision"],
+        )
+        if f in multi:
+            todo.append(("jobs.tasks.split_pdf", upload.pk, batch.pk, d["level"], d.get("scale"), d.get("sheet") or ""))
+            continue
+        level = d["level"] if len(d["drawings"]) == 1 else ""
+        title = " ".join(x for x in (project.code, level or Path(f.name).stem[:40]) if x)
+        pm = Premeasure.objects.create(
+            project=project, level=d["level"], title=safe_name(title), drawing=upload, page=1,
+            starter=job.upload if job else None, created_by=user, batch=batch, status=Premeasure.Status.QUEUED,
+            scale=d.get("scale"), sheet=d.get("sheet") or "",
+        )
+        single = pm if len(d["drawings"]) == 1 and not multi else None
+        todo.append(("jobs.tasks.analyse_premeasure", pm.pk))
+    for task in todo:
+        enqueue(*task)
+    return batch, single
 
 
 @login_required
@@ -328,6 +339,8 @@ def _rooms_view(pm: Premeasure, floors: dict) -> list[dict]:
 
 @login_required
 def premeasure(request, pk: int):
+    from .tender import checks_for, rooms_to_check, written_out_of_date
+
     pm = get_object_or_404(Premeasure.objects.select_related("project", "drawing", "starter", "batch"), pk=pk)
     ctx = {"pm": pm, "project": pm.project}
     if pm.summary and not pm.busy:
@@ -349,9 +362,13 @@ def premeasure(request, pk: int):
             n_written=sum(r["written"] for r in rooms),
             missing=[f for f in pm.summary["finishes"] if norm(f["code"]) not in in_setup],
             unmapped=unmapped(pm.summary, floors, skirtings),
-            out_of_date=bool(pm.output) and pm.status == Premeasure.Status.DONE
-            and (floors, skirtings) != (pm.finish_products, pm.skirting_products),
+            out_of_date=written_out_of_date(pm, floors, skirtings),
+            to_check=len(rooms_to_check(pm, floors)),
+            checks=checks_for(pm),
         )
+        for r in rooms:
+            c = ctx["checks"].get(r["id"])
+            r["check"] = c.decision if c else ""
     ctx["sheets"] = ["A0", "A1", "A2", "A3", "A4"]
     return render(request, "jobs/premeasure.html", ctx)
 

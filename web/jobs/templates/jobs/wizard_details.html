@@ -1,0 +1,40 @@
+{% extends "jobs/base.html" %}
+{% block title %}{% if project %}{{ project.code }} details{% else %}New tender{% endif %} · Crean pre-measure{% endblock %}
+{% block content %}
+{% if project %}<p class="muted"><a href="{% url 'project' project.pk %}">{{ project.code }} {{ project.name }}</a></p>{% endif %}
+<h1>{% if project %}Tender details{% else %}New tender{% endif %}</h1>
+<p class="sub">{% if project %}Who the tender is for.{% else %}Five short steps: details, tender questions, drawings, products, then run. You can come back to any step later.{% endif %}</p>
+{% include "jobs/_wizard_steps.html" %}
+<form method="post" class="card">{% csrf_token %}
+  {% if form.non_field_errors %}<div class="msg error">{{ form.non_field_errors|join:" " }}</div>{% endif %}
+  <div class="form-grid">
+    {% with field=form.code %}{% include "jobs/_field.html" %}{% endwith %}
+    {% with field=form.name %}{% include "jobs/_field.html" %}{% endwith %}
+  </div>
+  <div class="form-grid">
+    <div class="field">{{ form.client.label_tag }}{{ form.client }}
+      <div class="newco" data-for="id_client">{{ form.client_new }}{{ form.client_new.errors }}</div></div>
+    <div class="field">{{ form.main_contractor.label_tag }}{{ form.main_contractor }}
+      <div class="newco" data-for="id_main_contractor">{{ form.main_contractor_new }}{{ form.main_contractor_new.errors }}</div></div>
+    <div class="field">{{ form.architect.label_tag }}{{ form.architect }}
+      <div class="newco" data-for="id_architect">{{ form.architect_new }}{{ form.architect_new.errors }}</div>
+      <div class="help">Earlier tenders from the same architect suggest products.</div></div>
+  </div>
+  <div class="form-grid">
+    {% with field=form.site %}{% include "jobs/_field.html" %}{% endwith %}
+    {% with field=form.due %}{% include "jobs/_field.html" %}{% endwith %}
+  </div>
+  {% with field=form.notes %}{% include "jobs/_field.html" %}{% endwith %}
+  <button class="btn">{% if project %}Save{% else %}Next: tender questions{% endif %}</button>
+</form>
+<script>
+document.querySelectorAll(".newco").forEach(function (box) {
+  const select = document.getElementById(box.dataset.for);
+  const input = box.querySelector("input");
+  input.placeholder = "Name of the new one";
+  function show() { box.style.display = select.value === "__new__" ? "block" : "none"; if (select.value === "__new__") input.focus(); }
+  select.addEventListener("change", show);
+  box.style.display = select.value === "__new__" || input.value ? "block" : "none";
+});
+</script>
+{% endblock %}

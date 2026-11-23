@@ -1,0 +1,21 @@
+{% extends "jobs/base.html" %}
+{% block title %}Clients and contractors · Crean pre-measure{% endblock %}
+{% block content %}
+<p class="muted"><a href="{% url 'settings' %}">Settings</a></p>
+<div class="head"><div><h1>Clients, contractors and architects</h1>
+<p class="sub">Picked from a list when a tender is set up. New ones typed in the tender set-up are added here too.</p></div>
+<div class="actions"><a class="btn" href="{% url 'company_new' %}?kind={{ kind|default:'client' }}">Add one</a></div></div>
+<p>{% for k, label in kinds %}<a class="pill {% if k == kind %}warn{% else %}off{% endif %}" href="?kind={{ k }}" style="margin-right:6px">{{ label }}s</a>{% endfor %}
+  <a class="pill {% if not kind %}warn{% else %}off{% endif %}" href="?">All</a></p>
+<div class="card">
+  {% if items %}
+  <table>
+    <tr><th>Name</th><th>Type</th><th>Contact</th><th>Email</th><th class="num">Tenders</th><th></th></tr>
+    {% for c in items %}
+    <tr class="{% if not c.active %}row-off{% endif %}"><td><a href="{% url 'company_edit' c.pk %}">{{ c.name }}</a></td><td>{{ c.get_kind_display }}</td>
+      <td>{{ c.contact_name }}</td><td>{{ c.email }}</td><td class="num">{{ c.n }}</td><td>{% if not c.active %}<span class="pill off">Hidden</span>{% endif %}</td></tr>
+    {% endfor %}
+  </table>
+  {% else %}<p class="muted">None yet.</p>{% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,34 @@
+{% extends "jobs/base.html" %}
+{% block title %}{{ project.code }} tender questions · Crean pre-measure{% endblock %}
+{% block content %}
+<p class="muted"><a href="{% url 'project' project.pk %}">{{ project.code }} {{ project.name }}</a></p>
+<h1>Tender questions</h1>
+<p class="sub">These start as the company rules. Change only what this tender does differently, then carry on. Most tenders need no changes.</p>
+{% include "jobs/_wizard_steps.html" %}
+<form method="post">{% csrf_token %}
+<div class="card">
+  <h2>What this tender usually changes</h2>
+  <div class="form-grid">
+  {% for field in form %}{% if field.name in "min_opening_m2 glazing doorways furniture stairs coving_notes" %}
+    <div>{% include "jobs/_field.html" %}{% if field.name in applied %}<span class="pill ok">used now</span>{% endif %}</div>
+  {% endif %}{% endfor %}
+  </div>
+</div>
+<div class="card">
+  <details><summary><b>Wastage by type</b> <span class="muted">(company rules unless changed here)</span></summary>
+  <div class="form-grid" style="margin-top:12px">
+  {% for field in form %}{% if field.name|slice:":8" == "wastage_" %}{% include "jobs/_field.html" %}{% endif %}{% endfor %}
+  </div></details>
+</div>
+<div class="card">
+  <details><summary><b>Everything else</b> <span class="muted">(room edges, skirting on glazing, thresholds, splits, lifts)</span></summary>
+  <div class="form-grid" style="margin-top:12px">
+  {% for field in form %}{% if field.name in "room_edge skirting_on_glazing threshold_strips nosings_separate room_splits lift_floors two_sheets" %}
+    <div>{% include "jobs/_field.html" %}{% if field.name in applied %}<span class="pill ok">used now</span>{% endif %}</div>
+  {% endif %}{% endfor %}
+  </div></details>
+</div>
+<p class="muted">Rules marked <span class="pill ok">used now</span> change what the software measures today; the others are recorded for the estimator and applied as they are built.</p>
+<button class="btn">Next: drawings</button>
+</form>
+{% endblock %}
