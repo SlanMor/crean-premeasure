@@ -1,0 +1,7 @@
+<div class="grid">
+  <div class="stat"><b>{% if acc.agree_pct is not None %}{{ acc.agree_pct }}%{% else %}-{% endif %}</b><span>of the final floor inside the pre-measured outlines</span></div>
+  <div class="stat"><b>{% if acc.extra_pct is not None %}{{ acc.extra_pct }}%{% else %}-{% endif %}</b><span>pre-measured that the final job left out</span></div>
+  <div class="stat"><b>{% if acc.rft_pct is not None %}{{ acc.rft_pct }}%{% else %}-{% endif %}</b><span>of the final area right first time (same room, same product, within 2%)</span></div>
+  <div class="stat"><b>{% if acc.change_pct is not None %}{{ acc.change_pct }}%{% else %}-{% endif %}</b><span>typical change on rooms the estimator kept</span></div>
+</div>
+<p class="muted" style="margin:10px 0 0">{{ acc.area_final|floatformat:"0g" }} m² in {{ acc.jobs }} checked job{{ acc.jobs|pluralize }}. Rooms: {{ acc.counts.unchanged|default:0 }} unchanged, {{ acc.counts.outline_changed|default:0 }} outline changed, {{ acc.counts.product_changed|default:0 }} product changed, {{ acc.counts.split_or_joined|default:0 }} split or joined differently, {{ acc.counts.added|default:0 }} added and {{ acc.counts.removed|default:0 }} removed by the estimator.</p>

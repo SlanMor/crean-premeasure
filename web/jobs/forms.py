@@ -384,3 +384,25 @@ class ShortlistForm(forms.Form):
         queryset=LibraryProduct.objects.filter(active=True), required=False,
         label="Add products from the list",
     )
+
+
+class CheckedJobsForm(forms.Form):
+    """Callidus jobs back from the estimator, checked and finished."""
+
+    jobs = MultipleFileField(
+        label="Checked Callidus jobs (.est)", widget=MultipleFileInput(attrs={"accept": ".est"}),
+        help_text="One or several. Each is matched to its drawing by its name; the .CalBack is not needed.",
+    )
+
+    def clean_jobs(self):
+        from premeasure_engine.callidus import read_est
+
+        files = self.cleaned_data["jobs"]
+        for f in files:
+            try:
+                est = _check_file(f, ".est", read_est)
+            except forms.ValidationError as exc:
+                raise forms.ValidationError(f"{f.name}: {exc.messages[0]}") from exc
+            if not est.rooms:
+                raise forms.ValidationError(f"{f.name}: no rooms in this Callidus job.")
+        return files

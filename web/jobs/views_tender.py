@@ -384,3 +384,70 @@ def feedback(request):
         rooms = {r["id"]: r for r in (c.premeasure.summary or {}).get("rooms", [])}
         rows.append((c, rooms.get(c.room_id)))
     return render(request, "jobs/feedback.html", {"rows": rows})
+
+
+# --- checked Callidus jobs back from the estimator ------------------------------------
+
+
+@login_required
+def checked(request, pk: int):
+    """Upload the checked Callidus jobs; download Crean's quantities; see what changed."""
+    from .forms import CheckedJobsForm
+    from .roundtrip import accuracy, add_checked, current_jobs, not_back
+
+    project = get_object_or_404(Project, pk=pk)
+    form = CheckedJobsForm(request.POST or None, request.FILES or None)
+    if request.method == "POST" and form.is_valid():
+        pm = None
+        if request.POST.get("drawing", "").isdigit():
+            pm = project.premeasures.filter(pk=int(request.POST["drawing"])).first()
+        added = [add_checked(project, f, request.user, premeasure=pm) for f in form.cleaned_data["jobs"]]
+        matched = sum(1 for j in added if j.premeasure_id)
+        messages.success(request, f"Read {len(added)} Callidus job{'s' if len(added) != 1 else ''}"
+                                  f"{f', {matched} matched to their drawing' if matched else ''}.")
+        nxt = request.POST.get("next", "")
+        if nxt.startswith("/"):
+            return redirect(nxt)
+        return redirect("checked", pk=pk)
+    jobs = current_jobs(project)
+    return render(request, "jobs/checked.html", {
+        "project": project, "form": form, "jobs": jobs, "waiting": not_back(project),
+        "acc": accuracy(jobs), "older": project.checked_jobs.filter(current=False).count(),
+    })
+
+
+@login_required
+def checked_job(request, pk: int):
+    from .models import CheckedJob
+
+    job = get_object_or_404(CheckedJob.objects.select_related("project", "premeasure"), pk=pk)
+    return render(request, "jobs/checked_job.html", {"job": job, "project": job.project})
+
+
+@login_required
+def crean_quantities(request, pk: int):
+    from .roundtrip import crean_quantities as build
+    from .tasks import safe_name
+
+    project = get_object_or_404(Project, pk=pk)
+    if not project.checked_jobs.filter(current=True).exists():
+        messages.info(request, "Upload the checked Callidus jobs first.")
+        return redirect("checked", pk=pk)
+    resp = HttpResponse(build(project), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    resp["Content-Disposition"] = f'attachment; filename="{safe_name(project.name)} - Measure.xlsx"'
+    return resp
+
+
+@staff_required
+def accuracy_page(request):
+    """How much of each checked job was pre-measured right, across every tender."""
+    from .models import CheckedJob
+    from .roundtrip import accuracy
+
+    jobs = list(CheckedJob.objects.filter(current=True).exclude(comparison=None)
+                .select_related("project", "premeasure").order_by("-uploaded_at"))
+    scans = [j for j in jobs if j.premeasure and (j.premeasure.summary or {}).get("picture")]
+    exports = [j for j in jobs if j not in scans]
+    return render(request, "jobs/accuracy.html", {
+        "jobs": jobs, "all": accuracy(jobs), "exports": accuracy(exports), "scans": accuracy(scans),
+    })

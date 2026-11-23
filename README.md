@@ -8,15 +8,16 @@ Live at: https://crean.markgaffney.com
 
 | Folder | What it is |
 | --- | --- |
-| `engine/` | Measuring engine (Python). Reads Callidus .est and .CalBack files today; drawing extraction and Callidus writing are next. |
-| `web/` | Django platform: project setup, products, uploads, background jobs, admin. |
+| `engine/` | Measuring engine (Python): reads drawings and Callidus files, writes Callidus files and Crean's spreadsheets. |
+| `web/` | Django platform: tenders, products, drawings, room checks, queries, quantities, settings. |
 | `docs/` | Callidus format notes and deploy steps. |
 | `Dockerfile`, `docker-compose.yml`, `Caddyfile` | Server setup: app, worker, Postgres, Redis, HTTPS. |
 
 ## Status
 
-- Phase 0, done: repository, server stack, Callidus reader that reproduces Crean's spreadsheets on three jobs.
-- Phase 1, next: write a Callidus file that opens in Callidus. Needs four test files from Crean (see `docs/callidus-format.md`).
+- Reads finishes drawings (the architect's PDF export, or a scan) and writes pre-measured Callidus jobs that open in Callidus: rooms measured, named and given their product, skirting on room edges, background placed.
+- Platform: tender set-up wizard, products per tender, measuring rules, bulk upload, room checking, queries for the architect, tender quantities, and the round trip: checked Callidus jobs uploaded back give Crean's measure spreadsheet and the accuracy of the pre-measure.
+- How to use it: `docs/platform.md`. How drawings are read and how accurately: `docs/drawing-extraction.md`. The Callidus file format: `docs/callidus-format.md`. The server: `docs/deploy.md`.
 
 ## Running locally
 

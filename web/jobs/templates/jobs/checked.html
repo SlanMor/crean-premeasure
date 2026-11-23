@@ -1,0 +1,40 @@
+{% extends "jobs/base.html" %}
+{% block title %}Back from Callidus · {{ project.code }}{% endblock %}
+{% block content %}
+<p class="muted"><a href="{% url 'project' project.pk %}">{{ project.code }} {{ project.name }}</a></p>
+<div class="head"><div><h1>Back from Callidus</h1>
+<p class="sub">Once the estimator has checked and finished a job in Callidus, upload it here. Crean's measure spreadsheet comes from these, and each is compared with its pre-measure.</p></div>
+{% if jobs %}<div class="actions"><a class="btn" href="{% url 'crean_quantities' project.pk %}">Download measure spreadsheet</a></div>{% endif %}</div>
+
+<form method="post" enctype="multipart/form-data" class="card">{% csrf_token %}
+  {% with field=form.jobs %}{% include "jobs/_field.html" %}{% endwith %}
+  <button class="btn">Upload</button>
+  {% if waiting %}<p class="muted" style="margin:12px 0 0">Not back yet: {% for d in waiting %}<a href="{% url 'premeasure' d.pk %}">{{ d.title }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}.</p>{% endif %}
+</form>
+
+{% if acc.jobs %}
+<div class="card">
+  <h2>How the pre-measure held up</h2>
+  {% include "jobs/_accuracy.html" with acc=acc %}
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Checked jobs</h2>
+  {% if jobs %}
+  <table>
+    <tr><th>Callidus job</th><th>Drawing</th><th class="num">Rooms</th><th class="num">Area m²</th><th class="num">Floor agreed</th><th class="num">Right first time</th><th class="num">Typical change</th><th>Uploaded</th></tr>
+    {% for j in jobs %}
+    <tr><td>{% if j.comparison %}<a href="{% url 'checked_job' j.pk %}">{{ j.title }}</a>{% else %}{{ j.title }}{% endif %}<div class="tag">{{ j.upload.filename }}</div></td>
+      <td>{% if j.premeasure %}<a href="{% url 'premeasure' j.premeasure.pk %}">{{ j.premeasure.title }}</a>{% else %}<span class="muted">not matched to a drawing</span>{% endif %}</td>
+      <td class="num">{{ j.rooms }}</td><td class="num">{{ j.area_m2|floatformat:"2g" }}</td>
+      <td class="num">{% if j.comparison %}{% widthratio j.comparison.outline_agreement 1 100 %}%{% else %}<span class="muted">-</span>{% endif %}</td>
+      <td class="num">{% if j.comparison %}{% widthratio j.comparison.right_first_time 1 100 %}%{% else %}<span class="muted">-</span>{% endif %}</td>
+      <td class="num">{% if j.comparison.median_change is not None %}{% widthratio j.comparison.median_change 1 100 %}%{% endif %}</td>
+      <td class="muted">{{ j.uploaded_at|date:"j M Y H:i" }}{% if j.uploaded_by %} · {{ j.uploaded_by.get_full_name|default:j.uploaded_by.username }}{% endif %}</td></tr>
+    {% endfor %}
+  </table>
+  {% if older %}<p class="muted">{{ older }} earlier upload{{ older|pluralize }} replaced by newer ones.</p>{% endif %}
+  {% else %}<p class="muted">None yet.</p>{% endif %}
+</div>
+{% endblock %}
