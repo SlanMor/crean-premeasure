@@ -228,14 +228,14 @@ def new_premeasure(request, pk: int):
                 drawing_number=Path(f.name).stem[:100], revision=d["revision"],
             )
             if f in multi:
-                todo.append(("jobs.tasks.split_pdf", upload.pk, batch.pk, d["level"]))
+                todo.append(("jobs.tasks.split_pdf", upload.pk, batch.pk, d["level"], d.get("scale"), d.get("sheet") or ""))
                 continue
             level = d["level"] if len(d["drawings"]) == 1 else ""
             title = " ".join(x for x in (project.code, level or Path(f.name).stem[:40]) if x)
             pm = Premeasure.objects.create(
                 project=project, level=d["level"], title=safe_name(title), drawing=upload, page=1,
                 starter=job.upload, created_by=request.user, batch=batch, status=Premeasure.Status.QUEUED,
-                scale=d.get("scale"),
+                scale=d.get("scale"), sheet=d.get("sheet") or "",
             )
             single = pm if len(d["drawings"]) == 1 else None
             todo.append(("jobs.tasks.analyse_premeasure", pm.pk))
@@ -310,6 +310,7 @@ def premeasure(request, pk: int):
             missing=[f for f in pm.summary["finishes"] if norm(f["code"]) not in in_setup],
             unmapped=unmapped(pm.summary, floors, skirtings),
         )
+    ctx["sheets"] = ["A0", "A1", "A2", "A3", "A4"]
     return render(request, "jobs/premeasure.html", ctx)
 
 
@@ -356,6 +357,8 @@ def set_scale(request, pk: int):
     form = ScaleForm(request.POST)
     if form.is_valid() and not pm.busy:
         pm.scale = form.cleaned_data["scale"]
+        if form.cleaned_data.get("sheet"):
+            pm.sheet = form.cleaned_data["sheet"]
         pm.status, pm.error = Premeasure.Status.QUEUED, ""
         pm.save()
         enqueue("jobs.tasks.analyse_premeasure", pm.pk)

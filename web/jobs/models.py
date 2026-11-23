@@ -245,6 +245,10 @@ class Premeasure(models.Model):
     scale = models.PositiveIntegerField(
         null=True, blank=True, help_text="Drawing scale 1:N, only when it is not printed on the sheet."
     )
+    sheet = models.CharField(
+        max_length=2, blank=True, choices=[(s, s) for s in ("A0", "A1", "A2", "A3", "A4")],
+        help_text="Sheet size, only for a drawing saved as a picture whose title block does not show it.",
+    )
     starter = models.ForeignKey(
         Upload, on_delete=models.PROTECT, related_name="premeasures_started", null=True, blank=True,
         help_text="The project's Callidus job this was written from; empty means the house template.",
@@ -275,7 +279,14 @@ class Premeasure(models.Model):
 
     @property
     def needs_scale(self) -> bool:
-        return self.status == self.Status.FAILED and self.error.startswith("No drawing scale")
+        return self.status == self.Status.FAILED and (
+            self.error.startswith("No drawing scale") or self.needs_sheet
+        )
+
+    @property
+    def needs_sheet(self) -> bool:
+        """A picture of a drawing: measured once its sheet size and scale are known."""
+        return self.status == self.Status.FAILED and "Enter the sheet size" in self.error
 
     @property
     def plain_error(self) -> bool:

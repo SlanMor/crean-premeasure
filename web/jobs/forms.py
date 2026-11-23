@@ -24,6 +24,9 @@ def _check_file(upload, suffix: str, check) -> None:
             upload.seek(0)
 
 
+SHEET_CHOICES = [("", "Read from the drawing")] + [(x, x) for x in ("A0", "A1", "A2", "A3", "A4")]
+
+
 class ProjectForm(forms.ModelForm):
     class Meta:
         model = Project
@@ -89,6 +92,11 @@ class UploadDrawingsForm(forms.Form):
     scale = forms.IntegerField(
         label="Scale 1:", required=False, min_value=1, max_value=5000,
         help_text="Leave blank: it is read from the drawing. Only fill in if the sheet has no scale printed.",
+    )
+    sheet = forms.ChoiceField(
+        label="Sheet size", required=False, choices=SHEET_CHOICES,
+        help_text="Leave blank: only needed for a scanned drawing (a picture, not the architect's export) "
+        "when the title block does not show it. Measuring a picture depends on it.",
     )
     auto_write = forms.BooleanField(
         label="Write the Callidus files automatically", required=False, initial=True,
@@ -272,3 +280,4 @@ class UserForm(forms.ModelForm):
 
 class ScaleForm(forms.Form):
     scale = forms.IntegerField(label="Scale 1:", min_value=1, max_value=5000, initial=100)
+    sheet = forms.ChoiceField(label="Sheet size", required=False, choices=SHEET_CHOICES)

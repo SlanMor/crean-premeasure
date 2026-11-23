@@ -27,6 +27,8 @@ from .callidus.calback_writer import encode_tiff, render_pdf_page, sheet_extents
 from .callidus.job_writer import build_job, check_rooms
 from .callidus.material_writer import NewProduct, extend_template
 from .drawing import Legend, LegendEntry, Room, find_rooms, read_drawing, read_legend
+from .drawing.pdf_reader import PictureOnly
+from .drawing.picture import AREA_CHECK, read_picture
 from .drawing.products import suggest_materials
 from .drawing.to_callidus import room_name, to_records
 
@@ -63,6 +65,7 @@ class Analysis:
     report: dict
     finishes: list[Finish]
     materials: list[str]  # product names in the starter file, in file order
+    picture: bool = False  # read from a picture of the drawing (scanned or flattened), not its linework
 
 
 def pdf_pages(pdf: str | Path) -> int:
@@ -107,14 +110,26 @@ def analyse(
     pdf: str | Path, products: str | Path | list[str], page: int = 0, exclude: list[tuple] | None = None,
     min_opening: float | None = None,
     scale: float | None = None,
+    sheet: str | None = None,
 ) -> Analysis:
     """``products``: the product names to suggest from, or a Callidus .est holding them.
-    ``min_opening``: openings smaller than this (m2) are measured through."""
+    ``min_opening``: openings smaller than this (m2) are measured through.
+    ``scale`` (1:N) and ``sheet`` (A0..A4): only needed when the drawing does not
+    show them; the sheet size only matters for a picture of a drawing."""
     pdf = Path(pdf)
-    dwg = read_drawing(pdf, page=page, scale=scale)
-    legend = read_legend(dwg)
     kwargs = {} if min_opening is None else {"min_opening": min_opening}
-    rooms, report = find_rooms(dwg, legend, exclude=exclude, **kwargs)
+    try:
+        dwg = read_drawing(pdf, page=page, scale=scale)
+    except PictureOnly:
+        dwg = None
+    if dwg is not None:
+        legend = read_legend(dwg)
+        rooms, report = find_rooms(dwg, legend, exclude=exclude, **kwargs)
+        scale, width_m, height_m = dwg.scale, dwg.width_m, dwg.height_m
+    else:
+        pic = read_picture(pdf, page=page, sheet=sheet, scale=scale, **kwargs)
+        legend, rooms, report = pic.legend, pic.rooms, pic.report
+        scale, width_m, height_m = pic.scale, pic.width_m, pic.height_m
     if isinstance(products, (str, Path)):
         products = [m.name for m in read_est(products).materials]
     materials = [m for m in products if m not in NOT_A_PRODUCT]
@@ -154,8 +169,9 @@ def analyse(
             )
         )
     return Analysis(
-        pdf=pdf, page=page, scale=dwg.scale, width_m=dwg.width_m, height_m=dwg.height_m,
+        pdf=pdf, page=page, scale=scale, width_m=width_m, height_m=height_m,
         rooms=rooms, legend=legend, report=report, finishes=finishes, materials=materials,
+        picture=dwg is None,
     )
 
 
@@ -195,6 +211,22 @@ def summary(a: Analysis) -> dict:
             {"colour": list(c), "area_m2": v} for c, v in sorted(rep.get("unknown_fills", {}).items(), key=lambda kv: -kv[1])
         ],
         "tagged_not_in_legend": rep.get("tagged_not_in_legend", {}),
+        "picture": _picture_summary(a),
+    }
+
+
+def _picture_summary(a: Analysis) -> dict | None:
+    if not getattr(a, "picture", False):
+        return None
+    rep = a.report
+    pa = rep.get("printed_areas", {})
+    return {
+        "sheet": rep.get("sheet"),
+        "sources": rep.get("sources", {}),
+        "printed_areas": dict(pa, off=None if pa.get("ratio") is None else round(abs(pa["ratio"] - 1) * 100, 1)),
+        "agrees": pa.get("ratio") is not None and abs(pa["ratio"] - 1) <= AREA_CHECK,
+        "unclear_codes": rep.get("unclear_codes", []),
+        "shape_note": rep.get("shape_note"),
     }
 
 
@@ -249,7 +281,7 @@ def write_outputs(
     if {m.name: m.index for m in back.materials} != index or len(back.rooms) != len(records):
         raise ValueError("the written file does not read back as written")
 
-    img = render_pdf_page(a.pdf, a.page, BACKGROUND_DPI)
+    img = _page_image(a, BACKGROUND_DPI, bilevel=True)
     calback_path = Path(str(est_path) + ".CalBack")
     write_calback(calback_template, calback_path, encode_tiff(img, dpi=BACKGROUND_DPI),
                   sheet_extents(img.width, img.height, BACKGROUND_DPI, a.scale))
@@ -365,20 +397,42 @@ def _readme(a: Analysis, name: str, written, left_out, finish_products) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _page_image(a: Analysis, dpi: int, bilevel: bool = False):
+    """The drawing as an image at ``dpi`` on the printed sheet: black and white
+    for a Callidus background, grey otherwise. A picture of a drawing is resized
+    to the sheet's real size, so it lines up with the rooms."""
+    from PIL import Image
+
+    Image.MAX_IMAGE_PIXELS = None
+    if not getattr(a, "picture", False):
+        if bilevel:
+            return render_pdf_page(a.pdf, a.page, dpi)
+        import pypdfium2 as pdfium
+
+        doc = pdfium.PdfDocument(str(a.pdf))
+        try:
+            return doc[a.page].render(scale=dpi / 72, grayscale=True).to_pil()
+        finally:
+            doc.close()
+    from .drawing.picture import load_picture
+
+    img = load_picture(a.pdf, a.page).convert("L")
+    px_per_m = 1000 / a.scale / 25.4 * dpi
+    size = (max(1, round(a.width_m * px_per_m)), max(1, round(a.height_m * px_per_m)))
+    if size != img.size:
+        img = img.resize(size, Image.LANCZOS)
+    return img.convert("1") if bilevel else img
+
+
 def render_preview(a: Analysis, out_png: str | Path, dpi: int = 60, highlight: set[str] | None = None) -> Path:
     """A small picture of the drawing with every room outlined: green when
     verified, amber when it needs review, grey when its finish has no product
     (``highlight`` is the set of finish codes with a product; None = all)."""
-    import pypdfium2 as pdfium
     from PIL import Image, ImageDraw
 
-    doc = pdfium.PdfDocument(str(a.pdf))
-    try:
-        img = doc[a.page].render(scale=dpi / 72, grayscale=True).to_pil().convert("RGB")
-    finally:
-        doc.close()
+    img = _page_image(a, dpi).convert("L").convert("RGB")
     img = Image.blend(img, Image.new("RGB", img.size, "white"), 0.45)
-    k = 1000 / a.scale / 25.4 * dpi  # pixels per sheet metre
+    k = img.width / a.width_m  # pixels per sheet metre
     over = Image.new("RGBA", img.size, (0, 0, 0, 0))
     d = ImageDraw.Draw(over)
     for r in a.rooms:
